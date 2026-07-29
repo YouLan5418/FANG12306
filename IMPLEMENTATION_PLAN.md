@@ -71,13 +71,13 @@
 
 ## Phase 3：用户域业务
 
-| ID | 任务 | 前置 | 影响范围 | 验收标准 |
-|----|------|------|----------|----------|
-| P3-T1 | 用户注册：布隆过滤器初始化 + 责任链校验 + Redisson 锁 + 多表写入 + 回写布隆 | P2-T1、P1-T2、P1-T3 | app/user/service | POST /register 成功；重复用户名被拒；布隆过滤器含新用户 |
-| P3-T2 | 用户登录：phone/mail 反查 username + 查 t_user + JWT + Redis 登录态 | P3-T1、P1-T5 | app/user/service | 手机号/邮箱/用户名三种方式登录均返回 token；Redis 有 token key |
-| P3-T3 | 登录态校验/登出：checkLogin/logout | P3-T2 | app/user/controller | checkLogin 返回用户信息；logout 后 token 失效 |
-| P3-T4 | 乘车人 CRUD | P2-T1、P3-T2 | app/user/service | 增删改查通过；乘车人加密字段脱敏返回 |
-| P3-T5 | 用户信息查询/更新/注销（含 t_user_deletion/reuse） | P3-T2 | app/user/service | 注销后 username 可重用；读请求扩散走 phone/mail 索引表 |
+| ID | 任务 | 前置 | 影响范围 | 验收标准 | 状态 |
+|----|------|------|----------|----------|------|
+| P3-T1 | 用户注册：布隆过滤器初始化 + 责任链校验 + Redisson 锁 + 多表写入 + 回写布隆 | P2-T1、P1-T2、P1-T3 | app/user/service | POST /register 成功；重复用户名被拒；布隆过滤器含新用户 | ✅ 完成 |
+| P3-T2 | 用户登录：phone/mail 反查 username + 查 t_user + JWT + Redis 登录态 | P3-T1、P1-T5 | app/user/service | 手机号/邮箱/用户名三种方式登录均返回 token；Redis 有 token key | ✅ 完成 |
+| P3-T3 | 登录态校验/登出：checkLogin/logout | P3-T2 | app/user/controller | checkLogin 返回用户信息；logout 后 token 失效 | ✅ 完成 |
+| P3-T4 | 乘车人 CRUD | P2-T1、P3-T2 | app/user/service | 增删改查通过；乘车人加密字段脱敏返回 | ✅ 完成 |
+| P3-T5 | 用户信息查询/更新/注销（含 t_user_deletion/reuse） | P3-T2 | app/user/service | 注销后 username 可重用；读请求扩散走 phone/mail 索引表 | ✅ 完成 |
 
 ## Phase 4：订单域业务
 
