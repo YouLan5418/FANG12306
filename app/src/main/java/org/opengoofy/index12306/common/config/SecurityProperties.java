@@ -1,6 +1,7 @@
 package org.opengoofy.index12306.common.config;
 
 import jakarta.annotation.PostConstruct;
+import cn.hutool.core.util.StrUtil;
 import lombok.Data;
 import org.opengoofy.index12306.common.toolkit.AESCryptUtil;
 import org.opengoofy.index12306.common.toolkit.JWTUtil;
@@ -28,7 +29,12 @@ public class SecurityProperties {
 
     @PostConstruct
     public void init() {
-        JWTUtil.setSecret(jwtSecret);
-        AESCryptUtil.setKey(aesSecret);
+        // application.yml 中留空表示使用默认值，避免空密钥覆盖默认配置
+        if (StrUtil.isNotBlank(jwtSecret)) {
+            JWTUtil.setSecret(jwtSecret);
+        }
+        if (StrUtil.isNotBlank(aesSecret)) {
+            AESCryptUtil.setKey(aesSecret);
+        }
     }
 }
