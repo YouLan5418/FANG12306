@@ -34,7 +34,7 @@
 |-------|------|------|
 | P0 工程骨架与环境 | ✅ 基本完成（P0-T4 CI 暂缓） | 骨架/连接/库表就绪；P0-T4 GitHub Actions 按用户要求暂不补 |
 | P1 framework 基础层 | ✅ 完成 | convention/cache/idempotent/distributedid/common 全部编译通过，含 4 个单测 |
-| P2 数据访问层 | 🔶 进行中（T1/T2 完成） | 用户域、订单支付域实体/Mapper 完成，共 9 个 Mapper 单测通过；T3~T4 未开始 |
+| P2 数据访问层 | 🔶 进行中（T1/T2/T3 完成） | 用户/订单支付/票务域实体/Mapper 完成，共 18 个 Mapper 单测通过；T4 未开始 |
 | P3-P11 | ⬜ 未开始 | - |
 
 **已通过自评审并修复**：清理 cache 模块死代码（CacheGetFilter/CacheGetIfAbsent 未使用的接口与类）；修复 SecurityProperties 空密钥覆盖默认值导致 JWT WeakKeyException 的问题（空值时回退默认密钥）。**P2-T1 验证结论**：MyBatis-Plus Wrapper 条件参数不经过 TypeHandler，加密字段（id_card/phone/mail/address）作查询条件时需在业务层先显式加密再入参。
@@ -66,7 +66,7 @@
 |----|------|------|----------|----------|------|
 | P2-T1 | 用户域实体 + Mapper（User/Phone/Mail/Passenger/Deletion/Reuse） | P1-T5 | app/user/dao | Mapper 单测：insert+selectOne 走对应分区；加密字段读写一致 | ✅ 完成（4 个 Mapper 单测通过） |
 | P2-T2 | 订单支付域实体 + Mapper（Order/OrderItem/OrderItemPassenger/Pay/Refund） | P1-T5 | app/order/dao、app/pay/dao | Mapper 单测：按 order_sn 路由到正确分区 | ✅ 完成（5 个 Mapper 单测通过） |
-| P2-T3 | 票务域实体 + Mapper（Ticket/Seat/Train/Station/Carriage/TrainStation/Relation/Price/Region） | P1-T5 | app/ticket/dao | Mapper 单测：t_seat 按 train_id 路由；t_ticket 按 username 路由 | ⬜ 未开始 |
+| P2-T3 | 票务域实体 + Mapper（Ticket/Seat/Train/Station/Carriage/TrainStation/Relation/Price/Region） | P1-T5 | app/ticket/dao | Mapper 单测：t_seat 按 train_id 路由；t_ticket 按 username 路由 | ✅ 完成（9 个 Mapper 单测通过） |
 | P2-T4 | 客服域实体 + Mapper（KbCategory/KbDocument/KnowledgeChunk/IngestionTask/ChatSession/ChatMessage） | P1-T5 | app/customerservice/dao | Mapper 单测：knowledge_chunk 插入 vector 类型成功 | ⬜ 未开始 |
 
 ## Phase 3：用户域业务
