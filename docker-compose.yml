@@ -1,0 +1,57 @@
+﻿# 12306 重构版本地开发中间件编排
+# 用法: docker compose up -d
+# 说明: PG/Redis 已有运行容器可继续使用;此文件用于环境复现与一键拉起。
+services:
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "12345678"
+      POSTGRES_DB: index12306
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # pgvector 扩展需在库中执行: CREATE EXTENSION IF NOT EXISTS vector;
+
+  redis:
+    image: redis:7
+    container_name: redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass 123456
+    volumes:
+      - redis_data:/data
+
+  rocketmq-namesrv:
+    image: apache/rocketmq:5.3.1
+    container_name: rocketmq-namesrv
+    restart: unless-stopped
+    ports:
+      - "9876:9876"
+    environment:
+      JAVA_OPT_EXT: "-server -Xms256m -Xmx256m -Xmn128m"
+    command: sh mqnamesrv
+
+  rocketmq-broker:
+    image: apache/rocketmq:5.3.1
+    container_name: rocketmq-broker
+    restart: unless-stopped
+    ports:
+      - "10909:10909"
+      - "10911:10911"
+    depends_on:
+      - rocketmq-namesrv
+    environment:
+      NAMESRV_ADDR: "rocketmq-namesrv:9876"
+      JAVA_OPT_EXT: "-server -Xms512m -Xmx512m -Xmn256m"
+    volumes:
+      - ./docker/rocketmq/broker/broker.conf:/home/rocketmq/rocketmq-5.3.1/conf/broker.conf
+    command: sh mqbroker -c /home/rocketmq/rocketmq-5.3.1/conf/broker.conf
+
+volumes:
+  postgres_data:
+  redis_data:

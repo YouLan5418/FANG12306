@@ -1,0 +1,41 @@
+package org.opengoofy.index12306.common.core;
+
+import com.alibaba.ttl.TransmittableThreadLocal;
+
+import java.util.Optional;
+
+/**
+ * 用户上下文，基于 TransmittableThreadLocal 实现线程间传递。
+ */
+public final class UserContext {
+
+    private static final ThreadLocal<UserInfoDTO> USER_THREAD_LOCAL = new TransmittableThreadLocal<>();
+
+    public static void setUser(UserInfoDTO user) {
+        USER_THREAD_LOCAL.set(user);
+    }
+
+    public static UserInfoDTO getUser() {
+        return USER_THREAD_LOCAL.get();
+    }
+
+    public static String getUserId() {
+        return Optional.ofNullable(USER_THREAD_LOCAL.get()).map(UserInfoDTO::getUserId).orElse(null);
+    }
+
+    public static String getUsername() {
+        return Optional.ofNullable(USER_THREAD_LOCAL.get()).map(UserInfoDTO::getUsername).orElse(null);
+    }
+
+    public static String getRealName() {
+        return Optional.ofNullable(USER_THREAD_LOCAL.get()).map(UserInfoDTO::getRealName).orElse(null);
+    }
+
+    public static String getToken() {
+        return Optional.ofNullable(USER_THREAD_LOCAL.get()).map(UserInfoDTO::getToken).orElse(null);
+    }
+
+    public static void removeUser() {
+        USER_THREAD_LOCAL.remove();
+    }
+}
