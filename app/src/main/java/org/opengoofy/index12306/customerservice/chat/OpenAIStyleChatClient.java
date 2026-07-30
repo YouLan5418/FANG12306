@@ -257,6 +257,20 @@ public class OpenAIStyleChatClient implements ChatClient {
             if (msg.getRole() == ChatMessage.Role.TOOL && msg.getToolCallId() != null) {
                 m.put("tool_call_id", msg.getToolCallId());
             }
+            if (msg.getRole() == ChatMessage.Role.ASSISTANT && msg.getToolCalls() != null && !msg.getToolCalls().isEmpty()) {
+                JSONArray tcArray = new JSONArray();
+                for (ToolCall tc : msg.getToolCalls()) {
+                    JSONObject tcObj = new JSONObject();
+                    tcObj.put("id", tc.getId());
+                    tcObj.put("type", "function");
+                    JSONObject fn = new JSONObject();
+                    fn.put("name", tc.getName());
+                    fn.put("arguments", tc.getArguments());
+                    tcObj.put("function", fn);
+                    tcArray.add(tcObj);
+                }
+                m.put("tool_calls", tcArray);
+            }
             messages.add(m);
         }
         body.put("messages", messages);
