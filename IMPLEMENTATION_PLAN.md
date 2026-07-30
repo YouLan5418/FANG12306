@@ -37,7 +37,9 @@
 | P2 数据访问层 | ✅ 完成 | 四个域实体/Mapper 完成，含 pgvector VectorTypeHandler |
 | P3 用户域业务 | ✅ 完成 | 注册/登录/乘车人/注销全链路，7 个用例通过。M2 里程碑达成 |
 | P4 订单域业务 | ✅ 完成 | 建单(三表+延迟关单MQ)/查询分页/状态机流转，5 个用例通过 |
-| P5-P11 | ⬜ 未开始 | - |
+| P5 购票域业务 | ✅ 完成 | 查询/选座/购票/延迟关单回滚，4 个用例通过 |
+| P6-P11 | ⬜ 未开始 | - |
+
 
 
 **已通过自评审并修复**：清理 cache 模块死代码（CacheGetFilter/CacheGetIfAbsent 未使用的接口与类）；修复 SecurityProperties 空密钥覆盖默认值导致 JWT WeakKeyException 的问题（空值时回退默认密钥）。**P2-T1 验证结论**：MyBatis-Plus Wrapper 条件参数不经过 TypeHandler，加密字段（id_card/phone/mail/address）作查询条件时需在业务层先显式加密再入参。
@@ -92,12 +94,12 @@
 
 ## Phase 5：购票域业务
 
-| ID | 任务 | 前置 | 影响范围 | 验收标准 |
-|----|------|------|----------|----------|
-| P5-T1 | 车票查询：责任链校验 + Redis 余票缓存 | P2-T3、P1-T2 | app/ticket/service | 查询返回车次列表；二次查询命中缓存 |
-| P5-T2 | 选座算法：策略模式（First/Second/Business）+ 位图选座 | P2-T3 | app/ticket/handler | 按车型选座返回车厢号/座位号；余票不足抛异常 |
-| P5-T3 | 购票下单 V2：令牌桶 + 本地锁(Caffeine) + 分布式公平锁 + 选座 + 存 t_ticket + 调 OrderService 建单 | P5-T2、P4-T1、P1-T3 | app/ticket/service | POST /purchase 返回 orderSn；t_ticket/t_order 有记录；令牌桶余票递减 |
-| P5-T4 | 延迟关单消费：RocketMQ 延迟消息 + closeTickOrder + 座位/余票/令牌桶回滚 | P4-T3、P5-T3 | app/ticket/mq | 未支付订单 2h 后（测试用短 delayLevel）关单成功；座位状态回滚；余票恢复 |
+| ID | 任务 | 前置 | 影响范围 | 验收标准 | 状态 |
+|----|------|------|----------|----------|------|
+| P5-T1 | 车票查询：责任链校验 + Redis 余票缓存 | P2-T3、P1-T2 | app/ticket/service | 查询返回车次列表；二次查询命中缓存 | ✅ 完成 |
+| P5-T2 | 选座算法：策略模式（First/Second/Business）+ 位图选座 | P2-T3 | app/ticket/handler | 按车型选座返回车厢号/座位号；余票不足抛异常 | ✅ 完成 |
+| P5-T3 | 购票下单 V2：令牌桶 + 本地锁(Caffeine) + 分布式公平锁 + 选座 + 存 t_ticket + 调 OrderService 建单 | P5-T2、P4-T1、P1-T3 | app/ticket/service | POST /purchase 返回 orderSn；t_ticket/t_order 有记录；令牌桶余票递减 | ✅ 完成 |
+| P5-T4 | 延迟关单消费：RocketMQ 延迟消息 + closeTickOrder + 座位/余票/令牌桶回滚 | P4-T3、P5-T3 | app/ticket/mq | 未支付订单 2h 后（测试用短 delayLevel）关单成功；座位状态回滚；余票恢复 | ✅ 完成 |
 
 ## Phase 6：支付域业务
 
