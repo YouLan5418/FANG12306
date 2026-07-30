@@ -35,10 +35,14 @@ class FunctionCallingEngineTests {
     private static class CollectingCallback implements StreamCallback {
         final StringBuilder content = new StringBuilder();
         final AtomicBoolean completed = new AtomicBoolean(false);
+        final List<ToolCall> toolCalls = new ArrayList<>();
         volatile Throwable error;
 
         @Override
         public void onContent(String c) { content.append(c); }
+
+        @Override
+        public void onToolCall(ToolCall tc) { toolCalls.add(tc); }
 
         @Override
         public void onComplete() { completed.set(true); }
@@ -155,6 +159,27 @@ class FunctionCallingEngineTests {
         assertNotNull(callback.error);
         assertTrue(callback.error.getMessage().contains("最大工具调用轮数"));
         verify(chatClient, times(2)).streamChatCollect(any(), any());
+    }
+
+    @Test
+    void toolCallMode_notifiesCallbackBeforeExecution() {
+        when(chatClient.streamChatCollect(any(), any()))
+                .thenReturn(ChatResponse.builder()
+                        .toolCall(new ToolCall("c1", "echo", "{}"))
+                        .build())
+                .thenAnswer(contentAnswer("Done"));
+
+        ToolExecutor echo = mock(ToolExecutor.class);
+        when(echo.name()).thenReturn("echo");
+        when(echo.execute(any(), any())).thenReturn("{\"result\":\"ok\"}");
+
+        CollectingCallback callback = new CollectingCallback();
+        new FunctionCallingEngine(chatClient, new ToolRegistry(List.of(echo)))
+                .run(new ArrayList<>(List.of(ChatMessage.user("hi"))), List.of(), callback, ctx);
+
+        // 工具执行前应通知前端
+        assertEquals(1, callback.toolCalls.size());
+        assertEquals("echo", callback.toolCalls.get(0).getName());
     }
 
     @Test

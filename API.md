@@ -279,7 +279,7 @@ POST /api/pay-service/common/refund           [内部]
 POST /api/customer-service/chat               [需登录]  [SSE 流式]
 请求: { sessionId?: string, message: string }
 响应: text/event-stream
-  data: {"type":"tool_call","tool":"queryTicket","args":{...}}
+  data: {"type":"tool_call","name":"queryTicket","args":{...}}
   data: {"type":"token","content":"北京"}
   data: {"type":"token","content":"到上海"}
   data: {"type":"done","sessionId":"..."}

@@ -75,6 +75,7 @@ public class FunctionCallingEngine {
                 messages.add(ChatMessage.assistantWithToolCalls(resp.getContent(), resp.getToolCalls()));
                 // 逐个执行工具，结果回填
                 for (ToolCall tc : resp.getToolCalls()) {
+                    callback.onToolCall(tc);
                     String result = executeToolSafe(tc, ctx);
                     messages.add(ChatMessage.tool(tc.getId(), tc.getName(), result));
                 }

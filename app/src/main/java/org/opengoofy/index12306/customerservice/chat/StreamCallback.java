@@ -11,6 +11,13 @@ public interface StreamCallback {
     default void onThinking(String content) {
     }
 
+    /**
+     * 工具调用前通知前端，推送 tool_call 事件。
+     * FC 引擎在执行每个工具前调用一次。
+     */
+    default void onToolCall(ToolCall toolCall) {
+    }
+
     void onComplete();
 
     void onError(Throwable error);

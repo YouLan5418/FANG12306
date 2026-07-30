@@ -73,6 +73,7 @@ public class CustomerServiceChatService {
 
         // SSE 连接 + 心跳
         SseEmitterSender sender = new SseEmitterSender();
+        sender.setSessionId(sessionId);
         sender.start();
 
         ToolExecutionContext ctx = new ToolExecutionContext(effectiveUsername, userId, sessionId);

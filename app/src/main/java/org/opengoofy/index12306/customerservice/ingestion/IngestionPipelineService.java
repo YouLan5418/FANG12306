@@ -11,6 +11,7 @@ import org.opengoofy.index12306.customerservice.dao.entity.KnowledgeChunkDO;
 import org.opengoofy.index12306.customerservice.dao.mapper.IngestionTaskMapper;
 import org.opengoofy.index12306.customerservice.dao.mapper.KbDocumentMapper;
 import org.opengoofy.index12306.customerservice.dao.mapper.KnowledgeChunkMapper;
+import org.opengoofy.index12306.customerservice.dto.resp.DocumentUploadRespDTO;
 import org.opengoofy.index12306.customerservice.embedding.EmbeddingClient;
 import org.opengoofy.index12306.customerservice.parser.DocumentParser;
 import org.opengoofy.index12306.customerservice.parser.DocumentParserSelector;
@@ -55,7 +56,7 @@ public class IngestionPipelineService {
      * @return 入库任务 ID
      */
     @Transactional
-    public Long upload(MultipartFile file, Long categoryId, String parserType, String chunkMode) {
+    public DocumentUploadRespDTO upload(MultipartFile file, Long categoryId, String parserType, String chunkMode) {
         String fileName = file.getOriginalFilename();
         String contentType = resolveContentType(file);
 
@@ -102,7 +103,10 @@ public class IngestionPipelineService {
         // 4. 异步处理
         asyncProcess(doc, task);
 
-        return task.getId();
+        return DocumentUploadRespDTO.builder()
+                .documentId(doc.getId())
+                .taskId(task.getId())
+                .build();
     }
 
     /**

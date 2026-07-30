@@ -17,4 +17,5 @@ public class KbCategoryRespDTO {
     private Long id;
     private String name;
     private String description;
+    private Long documentCount;
 }
