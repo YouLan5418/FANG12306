@@ -6,15 +6,14 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * First-packet routing callback for FC engine.
+ * FC 引擎首包分流回调。
  *
- * In OpenAI-compatible streaming, delta.tool_calls and delta.content are mutually
- * exclusive per chunk. The first chunk carrying either field definitively determines
- * the response path:
- * - CONTENT: flush content to downstream (user sees the answer)
- * - TOOL_CALL: suppress content (FC engine will execute tools and loop)
+ * 在 OpenAI 兼容流式中，delta.tool_calls 和 delta.content 在每个 chunk 中互斥出现。
+ * 首个携带其中之一的 chunk 即可确定响应路径：
+ * - CONTENT：将 content 推送给下游（用户看到回复）
+ * - TOOL_CALL：抑制 content（FC 引擎将执行工具并循环）
  *
- * This eliminates the "sync chat to check tool_calls, then streamChat" double-call.
+ * 这消除了「先同步 chat 判断 tool_calls，再 streamChat 输出」的双倍调用。
  */
 public class ProbeStreamCallback implements StreamCallback {
 
@@ -43,13 +42,12 @@ public class ProbeStreamCallback implements StreamCallback {
         if (mode == StreamMode.CONTENT) {
             downstream.onContent(content);
         }
-        // TOOL_CALL: suppress content
+        // TOOL_CALL 模式：抑制 content
     }
 
     /**
-     * Called by ChatClient when delta.tool_calls is detected in an SSE chunk.
-     * Tool call fragments are assembled by index (id/name in first chunk,
-     * arguments continued in subsequent chunks).
+     * ChatClient 在 SSE chunk 中检测到 delta.tool_calls 时调用。
+     * tool_call 分片按 index 组装（首个 chunk 含 id/name，后续 chunk 续接 arguments）。
      */
     public void onToolCallDelta(int index, String id, String name, String argumentsDelta) {
         if (mode == StreamMode.UNDECIDED) {
@@ -72,7 +70,7 @@ public class ProbeStreamCallback implements StreamCallback {
         if (mode != StreamMode.TOOL_CALL) {
             downstream.onComplete();
         }
-        // TOOL_CALL: don't call onComplete - FC engine will loop and produce final answer
+        // TOOL_CALL 模式：不调 onComplete，FC 引擎会循环并产生最终回复
     }
 
     @Override

@@ -5,9 +5,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Embedding client configuration mapped from application.yml prefix "ai.embedding".
- * Dimension is model-dependent (bge-m3=1024, text-embedding-3-large=3072, etc.)
- * and only used for validation/logging, not enforced by the type handler.
+ * Embedding 客户端配置，映射 application.yml 中 ai.embedding 前缀。
+ * dimension 由模型决定（bge-m3=1024, text-embedding-3-large=3072 等），
+ * 仅用于校验/日志，TypeHandler 不强制。
  */
 @Data
 @Configuration
@@ -24,6 +24,6 @@ public class EmbeddingProperties {
 
     private int timeoutMs = 30000;
 
-    /** Max texts per API call; larger batches are split. */
+    /** 单次 API 调用最大文本数，超出自动拆分 */
     private int batchSize = 20;
 }

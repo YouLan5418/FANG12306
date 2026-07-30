@@ -5,8 +5,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Chat message model with role-based classification.
- * Supports SYSTEM / USER / ASSISTANT / TOOL roles for FC engine conversations.
+ * 对话消息模型，按角色分类。
+ * 支持 SYSTEM / USER / ASSISTANT / TOOL 四种角色，TOOL 角色携带 toolCallId。
  */
 @Data
 @NoArgsConstructor
@@ -25,17 +25,17 @@ public class ChatMessage {
                     return role;
                 }
             }
-            throw new IllegalArgumentException("Invalid role: " + value);
+            throw new IllegalArgumentException("无效的角色: " + value);
         }
     }
 
     private Role role;
     private String content;
 
-    /** For TOOL role messages: which tool call produced this result. */
+    /** TOOL 角色消息：产生该结果的工具调用 ID */
     private String toolCallId;
 
-    /** For TOOL role messages: the tool name. */
+    /** TOOL 角色消息：工具名称 */
     private String toolName;
 
     public ChatMessage(Role role, String content) {

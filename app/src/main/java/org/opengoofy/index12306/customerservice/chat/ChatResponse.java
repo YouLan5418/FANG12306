@@ -10,7 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Chat response containing generated content and/or tool calls.
+ * 聊天响应，包含生成内容和/或工具调用。
  */
 @Data
 @NoArgsConstructor

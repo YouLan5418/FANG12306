@@ -4,8 +4,8 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Mock ChatClient for testing FC engine, tool execution, and error handling
- * without a real LLM. Returns scripted responses in sequence.
+ * Mock 聊天客户端，按预设脚本依次返回响应。
+ * 用于测试 FC 引擎、工具执行、异常容错，不依赖真实 LLM。
  */
 public class MockChatClient implements ChatClient {
 
@@ -42,10 +42,10 @@ public class MockChatClient implements ChatClient {
     public ChatResponse streamChatCollect(ChatRequest request, StreamCallback callback) {
         ChatResponse resp = nextResponse();
         if (resp.hasToolCalls()) {
-            // Tool call path: don't stream content to downstream
+            // 工具调用路径：不向下游推送 content
             return resp;
         }
-        // Content path: stream tokens then complete
+        // 内容路径：推送 token 后完成
         if (resp.getContent() != null && !resp.getContent().isEmpty()) {
             for (char c : resp.getContent().toCharArray()) {
                 callback.onContent(String.valueOf(c));

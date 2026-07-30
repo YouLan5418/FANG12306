@@ -9,9 +9,9 @@ import org.redisson.api.RedissonClient;
 import org.springframework.stereotype.Component;
 
 /**
- * Per-user token bucket rate limiter backed by Redis (Redisson).
- * Prevents a single user from overwhelming the LLM with rapid messages.
- * Rate is configurable via ai.chat.rate-limit-per-minute (default 10/min).
+ * 基于 Redis（Redisson）的按用户令牌桶限流器。
+ * 防止单用户疯狂发消息导致 LLM 费用失控。
+ * 速率通过 ai.chat.rate-limit-per-minute 配置（默认 10 条/分钟）。
  */
 @Slf4j
 @Component
@@ -22,15 +22,15 @@ public class ChatRateLimiter {
     private final ChatProperties properties;
 
     /**
-     * Acquire one token for the given user. Throws if rate exceeded.
+     * 为指定用户获取一个令牌。超限时抛出异常。
      *
-     * @param username authenticated user
-     * @throws RuntimeException if rate limit exceeded
+     * @param username 已认证用户
+     * @throws RuntimeException 超出限流时抛出
      */
     public void acquire(String username) {
         String key = "chat:rate:" + username;
         RRateLimiter limiter = redissonClient.getRateLimiter(key);
-        // trySetRate only sets if not already configured; idempotent
+        // trySetRate 仅在未配置时设置，幂等
         limiter.trySetRate(
                 RateType.OVERALL,
                 properties.getRateLimitPerMinute(),
@@ -38,7 +38,7 @@ public class ChatRateLimiter {
                 RateIntervalUnit.MINUTES
         );
         if (!limiter.tryAcquire(1)) {
-            log.warn("Rate limit exceeded for user: {}", username);
+            log.warn("用户提问频率超限: {}", username);
             throw new RuntimeException("提问过于频繁，请稍后再试");
         }
     }

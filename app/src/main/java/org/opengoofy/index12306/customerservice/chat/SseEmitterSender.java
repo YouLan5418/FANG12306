@@ -9,9 +9,8 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
- * StreamCallback adapter that pushes content tokens to an SseEmitter.
- * Manages 15s heartbeat, 60s timeout, and clean teardown on
- * completion / error / client disconnect.
+ * StreamCallback 适配器，将内容 token 推送到 SseEmitter。
+ * 管理 15 秒心跳、60 秒超时，以及在完成/出错/客户端断连时清理资源。
  */
 @Slf4j
 public class SseEmitterSender implements StreamCallback {
@@ -34,14 +33,13 @@ public class SseEmitterSender implements StreamCallback {
         this.emitter = new SseEmitter(TIMEOUT_MS);
     }
 
-    /** For testing: use a pre-configured emitter. */
+    /** 测试用：传入预配置的 emitter */
     public SseEmitterSender(SseEmitter emitter) {
         this.emitter = emitter;
     }
 
     /**
-     * Initialize heartbeat and lifecycle callbacks.
-     * Must be called before streaming starts.
+     * 启动心跳和生命周期回调。必须在流式开始前调用。
      */
     public SseEmitterSender start() {
         heartbeatFuture = HEARTBEAT_SCHEDULER.scheduleAtFixedRate(
@@ -49,7 +47,7 @@ public class SseEmitterSender implements StreamCallback {
                     try {
                         emitter.send(SseEmitter.event().comment("heartbeat"));
                     } catch (Exception ignored) {
-                        // client likely disconnected
+                        // 客户端可能已断连
                     }
                 },
                 HEARTBEAT_INTERVAL_S, HEARTBEAT_INTERVAL_S, TimeUnit.SECONDS);
@@ -62,9 +60,7 @@ public class SseEmitterSender implements StreamCallback {
         return this;
     }
 
-    /**
-     * Returns the underlying SseEmitter for controller return value.
-     */
+    /** 返回底层 SseEmitter，供 Controller 返回 */
     public SseEmitter emitter() {
         return emitter;
     }
@@ -84,7 +80,7 @@ public class SseEmitterSender implements StreamCallback {
         try {
             emitter.send(SseEmitter.event().data(content));
         } catch (Exception e) {
-            log.debug("SSE send failed, client may have disconnected: {}", e.getMessage());
+            log.debug("SSE 发送失败，客户端可能已断连: {}", e.getMessage());
             completed = true;
             stopHeartbeat();
         }

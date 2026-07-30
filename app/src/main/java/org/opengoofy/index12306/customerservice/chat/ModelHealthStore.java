@@ -8,9 +8,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Circuit breaker for LLM model health tracking.
- * Three-state: CLOSED -> OPEN -> HALF_OPEN, per model id.
- * Uses ConcurrentHashMap.compute for atomic state transitions.
+ * LLM 模型健康状态存储器，实现断路器模式。
+ * 三态流转：CLOSED -> OPEN -> HALF_OPEN，按模型 ID 独立熔断。
+ * 使用 ConcurrentHashMap.compute 保证原子状态流转。
  */
 @Component
 @RequiredArgsConstructor
@@ -45,7 +45,7 @@ public class ModelHealthStore {
                 if (v.openUntil > now) {
                     return v;
                 }
-                // Open duration elapsed -> half-open probe
+                // 熔断时长已过 -> 进入半开探测
                 v.state = State.HALF_OPEN;
                 v.halfOpenInFlight = true;
                 allowed.set(true);
@@ -59,7 +59,7 @@ public class ModelHealthStore {
                 allowed.set(true);
                 return v;
             }
-            // CLOSED
+            // CLOSED 状态，放行调用
             allowed.set(true);
             return v;
         });
@@ -92,7 +92,7 @@ public class ModelHealthStore {
                 v = new ModelHealth();
             }
             if (v.state == State.HALF_OPEN) {
-                // Probe failed -> back to open
+                // 探测失败 -> 重新熔断
                 v.state = State.OPEN;
                 v.openUntil = now + properties.getOpenDurationMs();
                 v.consecutiveFailures = 0;

@@ -16,9 +16,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Cloud embedding client using OpenAI-compatible /embeddings endpoint.
- * Supports any model/dimension; batch requests are split by configured batchSize.
- * Circuit breaker integration via ModelHealthStore.
+ * 云端 Embedding 客户端，调用 OpenAI 兼容 /embeddings 端点。
+ * 支持任意模型/维度；批量请求按配置的 batchSize 自动拆分。
+ * 集成 ModelHealthStore 断路器。
  */
 @Slf4j
 @Component
@@ -41,7 +41,7 @@ public class CloudEmbeddingClient implements EmbeddingClient {
     @Override
     public float[] embed(String text) {
         if (!modelHealthStore.allowCall(properties.getModel())) {
-            throw new RuntimeException("Embedding service unavailable (circuit breaker open)");
+            throw new RuntimeException("Embedding 服务不可用（断路器开启）");
         }
         try {
             JSONObject body = new JSONObject();
@@ -50,9 +50,9 @@ public class CloudEmbeddingClient implements EmbeddingClient {
 
             HttpResponse<String> response = sendRequest(body);
             if (response.statusCode() != 200) {
-                log.warn("Embedding request failed: status={}, body={}", response.statusCode(), response.body());
+                log.warn("Embedding 请求失败: status={}, body={}", response.statusCode(), response.body());
                 modelHealthStore.markFailure(properties.getModel());
-                throw new RuntimeException("Embedding request failed: HTTP " + response.statusCode());
+                throw new RuntimeException("Embedding 请求失败: HTTP " + response.statusCode());
             }
 
             float[] result = parseEmbedding(response.body());
@@ -62,7 +62,7 @@ public class CloudEmbeddingClient implements EmbeddingClient {
             throw e;
         } catch (Exception e) {
             modelHealthStore.markFailure(properties.getModel());
-            throw new RuntimeException("Embedding request failed", e);
+            throw new RuntimeException("Embedding 请求失败", e);
         }
     }
 
@@ -75,7 +75,7 @@ public class CloudEmbeddingClient implements EmbeddingClient {
         if (texts.size() <= batchSize) {
             return doBatchEmbed(texts);
         }
-        // Split into sub-batches
+        // 拆分为子批次
         List<float[]> results = new ArrayList<>(texts.size());
         for (int i = 0; i < texts.size(); i += batchSize) {
             int end = Math.min(i + batchSize, texts.size());
@@ -87,7 +87,7 @@ public class CloudEmbeddingClient implements EmbeddingClient {
 
     private List<float[]> doBatchEmbed(List<String> texts) {
         if (!modelHealthStore.allowCall(properties.getModel())) {
-            throw new RuntimeException("Embedding service unavailable (circuit breaker open)");
+            throw new RuntimeException("Embedding 服务不可用（断路器开启）");
         }
         try {
             JSONObject body = new JSONObject();
@@ -96,9 +96,9 @@ public class CloudEmbeddingClient implements EmbeddingClient {
 
             HttpResponse<String> response = sendRequest(body);
             if (response.statusCode() != 200) {
-                log.warn("Batch embedding request failed: status={}, body={}", response.statusCode(), response.body());
+                log.warn("批量 Embedding 请求失败: status={}, body={}", response.statusCode(), response.body());
                 modelHealthStore.markFailure(properties.getModel());
-                throw new RuntimeException("Batch embedding failed: HTTP " + response.statusCode());
+                throw new RuntimeException("批量 Embedding 失败: HTTP " + response.statusCode());
             }
 
             List<float[]> results = parseBatchEmbeddings(response.body());
@@ -108,38 +108,31 @@ public class CloudEmbeddingClient implements EmbeddingClient {
             throw e;
         } catch (Exception e) {
             modelHealthStore.markFailure(properties.getModel());
-            throw new RuntimeException("Batch embedding failed", e);
+            throw new RuntimeException("批量 Embedding 失败", e);
         }
     }
 
-    // ==================== HTTP ====================
+    // ==================== HTTP 请求 ====================
 
     private HttpResponse<String> sendRequest(JSONObject body) throws Exception {
-        HttpRequest request = HttpRequest.newBuilder()
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(URI.create(properties.getBaseUrl() + "/embeddings"))
                 .header("Content-Type", "application/json")
                 .timeout(Duration.ofMillis(properties.getTimeoutMs()))
-                .POST(HttpRequest.BodyPublishers.ofString(body.toJSONString(), StandardCharsets.UTF_8))
-                .build();
+                .POST(HttpRequest.BodyPublishers.ofString(body.toJSONString(), StandardCharsets.UTF_8));
         if (properties.getApiKey() != null && !properties.getApiKey().isBlank()) {
-            request = HttpRequest.newBuilder()
-                    .uri(URI.create(properties.getBaseUrl() + "/embeddings"))
-                    .header("Content-Type", "application/json")
-                    .header("Authorization", "Bearer " + properties.getApiKey())
-                    .timeout(Duration.ofMillis(properties.getTimeoutMs()))
-                    .POST(HttpRequest.BodyPublishers.ofString(body.toJSONString(), StandardCharsets.UTF_8))
-                    .build();
+            builder.header("Authorization", "Bearer " + properties.getApiKey());
         }
-        return httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        return httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
     }
 
-    // ==================== Response parsing ====================
+    // ==================== 响应解析 ====================
 
     private float[] parseEmbedding(String responseBody) {
         JSONObject json = JSON.parseObject(responseBody);
         JSONArray data = json.getJSONArray("data");
         if (data == null || data.isEmpty()) {
-            throw new RuntimeException("Embedding response missing data array");
+            throw new RuntimeException("Embedding 响应缺少 data 数组");
         }
         JSONObject first = data.getJSONObject(0);
         JSONArray embedding = first.getJSONArray("embedding");
@@ -150,9 +143,9 @@ public class CloudEmbeddingClient implements EmbeddingClient {
         JSONObject json = JSON.parseObject(responseBody);
         JSONArray data = json.getJSONArray("data");
         if (data == null) {
-            throw new RuntimeException("Batch embedding response missing data array");
+            throw new RuntimeException("批量 Embedding 响应缺少 data 数组");
         }
-        // Sort by index to preserve input order
+        // 按 index 排序以保持输入顺序
         JSONObject[] sorted = new JSONObject[data.size()];
         for (int i = 0; i < data.size(); i++) {
             JSONObject item = data.getJSONObject(i);

@@ -5,7 +5,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Rerank client configuration mapped from application.yml prefix "ai.rerank".
+ * 重排序客户端配置，映射 application.yml 中 ai.rerank 前缀。
  */
 @Data
 @Configuration

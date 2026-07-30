@@ -1,8 +1,8 @@
 package org.opengoofy.index12306.customerservice.chat;
 
 /**
- * Streaming response callback for LLM token-by-token output.
- * onContent may be called zero or more times; onComplete exactly once on success.
+ * 流式响应回调接口，用于逐 token 接收 LLM 输出。
+ * onContent 可能被调用零次或多次；onComplete 在成功结束时恰好调用一次。
  */
 public interface StreamCallback {
 

@@ -8,8 +8,8 @@ import lombok.NoArgsConstructor;
 import java.util.Map;
 
 /**
- * Tool definition exposed to the LLM in OpenAI function-calling format.
- * Parameters follows JSON Schema convention.
+ * 工具定义，以 OpenAI function-calling 格式暴露给 LLM。
+ * parameters 遵循 JSON Schema 规范。
  */
 @Data
 @NoArgsConstructor

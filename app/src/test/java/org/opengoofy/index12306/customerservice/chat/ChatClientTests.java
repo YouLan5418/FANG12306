@@ -9,12 +9,11 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Unit tests for P7-T1: ModelHealthStore circuit breaker,
- * ProbeStreamCallback first-packet routing, and MockChatClient.
+ * P7-T1 单元测试：ModelHealthStore 断路器、ProbeStreamCallback 首包分流、MockChatClient。
  */
 class ChatClientTests {
 
-    // ==================== ModelHealthStore ====================
+    // ==================== ModelHealthStore 断路器测试 ====================
 
     @Test
     void modelHealthStore_allowsCallWhenClosed() {
@@ -42,7 +41,7 @@ class ChatClientTests {
         assertTrue(store.allowCall(modelId));
         store.markFailure(modelId);
 
-        // 3 consecutive failures -> OPEN
+        // 连续 3 次失败后触发熔断(OPEN)
         assertFalse(store.allowCall(modelId));
         assertTrue(store.isUnavailable(modelId));
     }
@@ -60,16 +59,16 @@ class ChatClientTests {
         store.allowCall(modelId);
         store.markFailure(modelId);
 
-        // OPEN
+        // 此时已进入 OPEN 状态
         assertFalse(store.allowCall(modelId));
 
-        // Wait for open duration to elapse
+        // 等待熔断时长过去
         Thread.sleep(250);
 
-        // HALF_OPEN: allow one probe call
+        // HALF_OPEN：放行一次探针调用
         assertTrue(store.allowCall(modelId));
 
-        // Probe succeeds -> CLOSED
+        // 探针成功 -> 恢复 CLOSED
         store.markSuccess(modelId);
         assertTrue(store.allowCall(modelId));
         assertFalse(store.isUnavailable(modelId));
@@ -91,9 +90,9 @@ class ChatClientTests {
         assertFalse(store.allowCall(modelId));
         Thread.sleep(250);
 
-        // HALF_OPEN probe
+        // HALF_OPEN 探针
         assertTrue(store.allowCall(modelId));
-        // Probe fails -> back to OPEN
+        // 探针失败 -> 重新回到 OPEN
         store.markFailure(modelId);
         assertFalse(store.allowCall(modelId));
     }
@@ -109,9 +108,9 @@ class ChatClientTests {
         store.allowCall(modelId);
         store.markFailure(modelId);
         store.markFailure(modelId);
-        // Success resets counter
+        // 成功会重置失败计数
         store.markSuccess(modelId);
-        // Need 3 more failures to open
+        // 需要再累计 3 次失败才会熔断
         store.allowCall(modelId);
         store.markFailure(modelId);
         store.allowCall(modelId);
@@ -119,7 +118,7 @@ class ChatClientTests {
         assertTrue(store.allowCall(modelId));
     }
 
-    // ==================== ProbeStreamCallback ====================
+    // ==================== ProbeStreamCallback 首包分流测试 ====================
 
     @Test
     void probeStreamCallback_contentMode_dispatchesToDownstream() throws InterruptedException {
@@ -223,7 +222,7 @@ class ChatClientTests {
         assertEquals("{\"sn\":\"B\"}", resp.getToolCalls().get(1).getArguments());
     }
 
-    // ==================== MockChatClient ====================
+    // ==================== MockChatClient 测试 ====================
 
     @Test
     void mockChatClient_chatReturnsScriptedResponse() {

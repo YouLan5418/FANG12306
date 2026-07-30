@@ -18,10 +18,9 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * Cloud rerank client using Cohere/Jina-style /rerank endpoint.
- * Degrades gracefully: on any failure (circuit breaker, API error, timeout),
- * returns the original candidates limited to topN sorted by retrieval score.
- * This ensures the RAG pipeline never breaks due to rerank issues.
+ * 云端重排序客户端，调用 Cohere/Jina 风格 /rerank 端点。
+ * 优雅降级：任何失败（断路器、API 错误、超时）时返回原始候选（按检索分数排序，限制 topN）。
+ * 确保 RAG 管道不因重排序问题中断。
  */
 @Slf4j
 @Component
@@ -50,7 +49,7 @@ public class CloudRerankClient implements RerankClient {
                     .toList();
         }
         if (!modelHealthStore.allowCall(properties.getModel())) {
-            log.warn("Rerank circuit breaker open, returning original candidates");
+            log.warn("重排序断路器开启，返回原始候选");
             return degrade(candidates, topN);
         }
         try {
@@ -65,7 +64,7 @@ public class CloudRerankClient implements RerankClient {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
 
             if (response.statusCode() != 200) {
-                log.warn("Rerank request failed: status={}, body={}", response.statusCode(), response.body());
+                log.warn("重排序请求失败: status={}, body={}", response.statusCode(), response.body());
                 modelHealthStore.markFailure(properties.getModel());
                 return degrade(candidates, topN);
             }
@@ -74,7 +73,7 @@ public class CloudRerankClient implements RerankClient {
             modelHealthStore.markSuccess(properties.getModel());
             return results;
         } catch (Exception e) {
-            log.warn("Rerank failed, degrading to original order: {}", e.getMessage());
+            log.warn("重排序失败，降级为原始顺序: {}", e.getMessage());
             modelHealthStore.markFailure(properties.getModel());
             return degrade(candidates, topN);
         }
@@ -115,7 +114,7 @@ public class CloudRerankClient implements RerankClient {
                 scored.add(new ScoredChunk(candidates.get(index), score));
             }
         }
-        // Sort by rerank score descending
+        // 按重排序分数降序排列
         scored.sort(Comparator.comparingDouble((ScoredChunk s) -> s.getRerankScore()).reversed());
         return scored;
     }

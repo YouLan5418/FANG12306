@@ -25,9 +25,9 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * OpenAI-compatible chat client supporting Ollama and cloud APIs.
- * Implements synchronous chat, async streaming, and collect-mode streaming
- * with circuit breaker integration and first-packet tool-call routing.
+ * OpenAI 兼容聊天客户端，支持 Ollama 和云端 API。
+ * 实现同步聊天、异步流式、收集模式流式三种调用方式，
+ * 集成断路器和首包工具调用分流。
  */
 @Slf4j
 @Component
@@ -58,7 +58,7 @@ public class OpenAIStyleChatClient implements ChatClient {
         return properties.getProvider();
     }
 
-    // ==================== Synchronous chat ====================
+    // ==================== 同步聊天 ====================
 
     @Override
     public ChatResponse chat(ChatRequest request) {
@@ -73,9 +73,9 @@ public class OpenAIStyleChatClient implements ChatClient {
             HttpRequest httpRequest = buildHttpRequest(bodyJson);
             HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             if (response.statusCode() != 200) {
-                log.warn("Chat request failed: status={}, body={}", response.statusCode(), response.body());
+                log.warn("聊天请求失败: status={}, body={}", response.statusCode(), response.body());
                 modelHealthStore.markFailure(properties.getModel());
-                throw new RuntimeException("Chat request failed: HTTP " + response.statusCode());
+                throw new RuntimeException("聊天请求失败: HTTP " + response.statusCode());
             }
             ChatResponse chatResponse = parseSyncResponse(response.body());
             modelHealthStore.markSuccess(properties.getModel());
@@ -84,11 +84,11 @@ public class OpenAIStyleChatClient implements ChatClient {
             throw e;
         } catch (Exception e) {
             modelHealthStore.markFailure(properties.getModel());
-            throw new RuntimeException("Chat request failed", e);
+            throw new RuntimeException("聊天请求失败", e);
         }
     }
 
-    // ==================== Async streaming ====================
+    // ==================== 异步流式 ====================
 
     @Override
     public StreamCancellationHandle streamChat(ChatRequest request, StreamCallback callback) {
@@ -105,9 +105,9 @@ public class OpenAIStyleChatClient implements ChatClient {
                 HttpResponse<InputStream> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofInputStream());
                 if (response.statusCode() != 200) {
                     String errorBody = readAll(response.body());
-                    log.warn("Stream chat failed: status={}, body={}", response.statusCode(), errorBody);
+                    log.warn("流式聊天失败: status={}, body={}", response.statusCode(), errorBody);
                     modelHealthStore.markFailure(properties.getModel());
-                    callback.onError(new RuntimeException("Stream chat failed: HTTP " + response.statusCode()));
+                    callback.onError(new RuntimeException("流式聊天失败: HTTP " + response.statusCode()));
                     return;
                 }
                 readSseStream(response.body(), callback, null, cancelled);
@@ -119,7 +119,7 @@ public class OpenAIStyleChatClient implements ChatClient {
                     modelHealthStore.markFailure(properties.getModel());
                     callback.onError(e);
                 } else {
-                    log.info("Stream chat cancelled: {}", e.getMessage());
+                    log.info("流式聊天已取消: {}", e.getMessage());
                 }
             }
         });
@@ -129,7 +129,7 @@ public class OpenAIStyleChatClient implements ChatClient {
         };
     }
 
-    // ==================== Collect-mode streaming ====================
+    // ==================== 收集模式流式 ====================
 
     @Override
     public ChatResponse streamChatCollect(ChatRequest request, StreamCallback callback) {
@@ -148,10 +148,10 @@ public class OpenAIStyleChatClient implements ChatClient {
             HttpResponse<InputStream> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofInputStream());
             if (response.statusCode() != 200) {
                 String errorBody = readAll(response.body());
-                log.warn("Stream chat collect failed: status={}, body={}", response.statusCode(), errorBody);
+                log.warn("收集模式流式失败: status={}, body={}", response.statusCode(), errorBody);
                 modelHealthStore.markFailure(properties.getModel());
-                probe.onError(new RuntimeException("Stream chat failed: HTTP " + response.statusCode()));
-                throw new RuntimeException("Stream chat failed: HTTP " + response.statusCode());
+                probe.onError(new RuntimeException("流式聊天失败: HTTP " + response.statusCode()));
+                throw new RuntimeException("流式聊天失败: HTTP " + response.statusCode());
             }
             AtomicBoolean cancelled = new AtomicBoolean(false);
             readSseStream(response.body(), null, probe, cancelled);
@@ -162,11 +162,11 @@ public class OpenAIStyleChatClient implements ChatClient {
         } catch (Exception e) {
             modelHealthStore.markFailure(properties.getModel());
             probe.onError(e);
-            throw new RuntimeException("Stream chat collect failed", e);
+            throw new RuntimeException("收集模式流式失败", e);
         }
     }
 
-    // ==================== SSE parsing ====================
+    // ==================== SSE 解析 ====================
 
     private void readSseStream(InputStream inputStream,
                                StreamCallback callback,
@@ -184,7 +184,7 @@ public class OpenAIStyleChatClient implements ChatClient {
         if (cancelled.get()) {
             return;
         }
-        // If stream ended without [DONE], signal completion
+        // 流未以 [DONE] 结束时补发完成信号
         if (probe != null) {
             probe.onComplete();
         } else if (callback != null) {
@@ -237,11 +237,11 @@ public class OpenAIStyleChatClient implements ChatClient {
                 }
             }
         } catch (Exception e) {
-            log.warn("Failed to parse SSE line: {}", line, e);
+            log.warn("解析 SSE 行失败: {}", line, e);
         }
     }
 
-    // ==================== Request building ====================
+    // ==================== 请求构建 ====================
 
     private String buildRequestBody(ChatRequest request, boolean stream) {
         JSONObject body = new JSONObject();
@@ -297,7 +297,7 @@ public class OpenAIStyleChatClient implements ChatClient {
         return builder.build();
     }
 
-    // ==================== Response parsing ====================
+    // ==================== 响应解析 ====================
 
     private ChatResponse parseSyncResponse(String responseBody) {
         JSONObject json = JSON.parseObject(responseBody);
@@ -330,7 +330,7 @@ public class OpenAIStyleChatClient implements ChatClient {
                 .build();
     }
 
-    // ==================== Helpers ====================
+    // ==================== 辅助方法 ====================
 
     private String toOpenAiRole(ChatMessage.Role role) {
         return switch (role) {

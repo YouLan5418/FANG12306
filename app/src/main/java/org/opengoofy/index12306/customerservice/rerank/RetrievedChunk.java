@@ -6,8 +6,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * A chunk retrieved from the knowledge base (vector or keyword channel).
- * Carries retrieval metadata for the rerank stage.
+ * 从知识库检索到的切片（向量或关键词通道）。
+ * 携带检索元数据供重排序阶段使用。
  */
 @Data
 @NoArgsConstructor
@@ -21,9 +21,9 @@ public class RetrievedChunk {
     private Integer chunkIndex;
     private String content;
 
-    /** Retrieval score from the source channel (cosine similarity or keyword relevance). */
+    /** 来源通道的检索分数（余弦相似度或关键词相关度） */
     private float score;
 
-    /** Which retrieval channel produced this chunk: "vector" or "keyword". */
+    /** 检索通道来源："vector" 或 "keyword" */
     private String source;
 }

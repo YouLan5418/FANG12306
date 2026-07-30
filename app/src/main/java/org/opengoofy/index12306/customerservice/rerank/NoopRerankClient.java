@@ -4,8 +4,8 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * No-op rerank client that returns candidates in original retrieval-score order.
- * Used as fallback when no rerank API is configured, or for testing.
+ * 空操作重排序客户端，按原始检索分数排序返回。
+ * 用于未配置重排序 API 时的兜底，或测试场景。
  */
 public class NoopRerankClient implements RerankClient {
 

@@ -10,8 +10,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Unit tests for P7-T3: NoopRerankClient ordering, CloudRerankClient degradation,
- * and rerank data models.
+ * P7-T3 单元测试：NoopRerankClient 排序、CloudRerankClient 降级、重排序数据模型。
  */
 class RerankClientTests {
 
@@ -51,7 +50,7 @@ class RerankClientTests {
 
     @Test
     void cloudRerankClient_degradesOnApiFailure() {
-        // Use invalid endpoint to trigger failure -> should degrade gracefully
+        // 使用无效端点触发失败 -> 应优雅降级
         RerankProperties props = new RerankProperties();
         props.setBaseUrl("http://localhost:1");
         props.setApiKey("test");
@@ -65,7 +64,7 @@ class RerankClientTests {
         CloudRerankClient client = new CloudRerankClient(props, healthStore);
         List<ScoredChunk> results = client.rerank("退票手续费", sampleCandidates(), 3);
 
-        // Should degrade to original order, not throw
+        // 应降级为原始顺序，不应抛出异常
         assertEquals(3, results.size());
         assertEquals(1L, results.get(0).getChunk().getChunkId());
     }

@@ -3,25 +3,25 @@ package org.opengoofy.index12306.customerservice.embedding;
 import java.util.List;
 
 /**
- * Embedding client abstraction for text vectorization.
- * Dimension is determined by the configured model, not hardcoded.
+ * 文本向量化客户端抽象接口。
+ * 维度由配置的模型决定，不硬编码。
  */
 public interface EmbeddingClient {
 
     /**
-     * Embed a single text into a dense vector.
+     * 将单条文本嵌入为稠密向量。
      *
-     * @param text input text
-     * @return float array whose length equals the model's output dimension
+     * @param text 输入文本
+     * @return float 数组，长度等于模型输出维度
      */
     float[] embed(String text);
 
     /**
-     * Embed multiple texts in a single batch request.
-     * Implementations may split into sub-batches if the count exceeds batchSize.
+     * 批量嵌入多条文本。
+     * 实现可按 batchSize 拆分为多次 API 调用。
      *
-     * @param texts list of input texts
-     * @return list of float arrays, same order as input
+     * @param texts 输入文本列表
+     * @return 向量列表，顺序与输入一致
      */
     List<float[]> embedBatch(List<String> texts);
 }

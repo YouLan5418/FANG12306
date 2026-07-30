@@ -5,8 +5,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Represents a single tool/function call requested by the LLM.
- * Arguments is a JSON string assembled from streaming deltas.
+ * LLM 请求的工具/函数调用。
+ * arguments 是从流式增量中拼接而成的 JSON 字符串。
  */
 @Data
 @NoArgsConstructor

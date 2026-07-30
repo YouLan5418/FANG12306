@@ -10,7 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Unified chat request carrying messages, optional tool definitions, and model parameters.
+ * 统一聊天请求，携带消息列表、可选工具定义和模型参数。
  */
 @Data
 @NoArgsConstructor

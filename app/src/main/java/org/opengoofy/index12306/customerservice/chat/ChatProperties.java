@@ -5,7 +5,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * AI chat client configuration mapped from application.yml prefix "ai.chat".
+ * AI 聊天客户端配置，映射 application.yml 中 ai.chat 前缀。
  */
 @Data
 @Configuration
@@ -24,12 +24,12 @@ public class ChatProperties {
 
     private int timeoutMs = 60000;
 
-    /** Circuit breaker: consecutive failures before opening. */
+    /** 限流：每用户每分钟最大消息数 */
+    private int rateLimitPerMinute = 10;
+
+    /** 断路器：连续失败多少次后熔断 */
     private int failureThreshold = 3;
 
-    private int rateLimitPerMinute = 10;
-    /** Rate limit: max chat messages per user per minute. */
-
-    /** Circuit breaker: open state duration in milliseconds. */
+    /** 断路器：熔断持续时长（毫秒） */
     private long openDurationMs = 30000;
 }

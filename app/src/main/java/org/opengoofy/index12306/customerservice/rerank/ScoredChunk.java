@@ -5,8 +5,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * A retrieved chunk with a rerank model's relevance score.
- * Rerank score replaces the original retrieval score for final ordering.
+ * 带重排序分数的检索切片。
+ * 重排序分数替代原始检索分数用于最终排序。
  */
 @Data
 @NoArgsConstructor

@@ -8,7 +8,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Unit tests for P7-T2: MockEmbeddingClient determinism and batch behavior.
+ * P7-T2 单元测试：MockEmbeddingClient 确定性和批量行为。
  */
 class EmbeddingClientTests {
 
@@ -57,7 +57,7 @@ class EmbeddingClientTests {
         for (float[] v : results) {
             assertEquals(64, v.length);
         }
-        // Same order as input
+        // 顺序与输入保持一致
         assertArrayEquals(client.embed("first"), results.get(0), 0.0001f);
         assertArrayEquals(client.embed("second"), results.get(1), 0.0001f);
         assertArrayEquals(client.embed("third"), results.get(2), 0.0001f);
