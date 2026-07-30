@@ -28,7 +28,7 @@
 
 ---
 
-## 当前进度（2026-07-29 更新）
+## 当前进度（2026-07-30 更新）
 
 | Phase | 状态 | 说明 |
 |-------|------|------|
@@ -38,7 +38,8 @@
 | P3 用户域业务 | ✅ 完成 | 注册/登录/乘车人/注销全链路，7 个用例通过。M2 里程碑达成 |
 | P4 订单域业务 | ✅ 完成 | 建单(三表+延迟关单MQ)/查询分页/状态机流转，5 个用例通过 |
 | P5 购票域业务 | ✅ 完成 | 查询/选座/购票/延迟关单回滚，4 个用例通过 |
-| P6-P11 | ⬜ 未开始 | - |
+| P6 支付域业务 | ✅ 完成 | 支付/回调/消费/退款+座位回滚缺口修复，含 4 个 MQ 消费者；验收测试 PayServiceFlowTests 通过 |
+| P7-P11 | 🔴 未开始 | - |
 
 
 
@@ -101,15 +102,14 @@
 | P5-T3 | 购票下单 V2：令牌桶 + 本地锁(Caffeine) + 分布式公平锁 + 选座 + 存 t_ticket + 调 OrderService 建单 | P5-T2、P4-T1、P1-T3 | app/ticket/service | POST /purchase 返回 orderSn；t_ticket/t_order 有记录；令牌桶余票递减 | ✅ 完成 |
 | P5-T4 | 延迟关单消费：RocketMQ 延迟消息 + closeTickOrder + 座位/余票/令牌桶回滚 | P4-T3、P5-T3 | app/ticket/mq | 未支付订单 2h 后（测试用短 delayLevel）关单成功；座位状态回滚；余票恢复 | ✅ 完成 |
 
-## Phase 6：支付域业务
+## Phase 6：支付域业务 ✅
 
-| ID | 任务 | 前置 | 影响范围 | 验收标准 |
-|----|------|------|----------|----------|
-| P6-T1 | 创建支付单：支付宝下单 API + 存 t_pay + 缓存支付结果 | P2-T2、P0-T2 | app/pay/service | POST /pay/create 返回支付宝支付链接；t_pay 有 WAIT_BUYER_PAY 记录 |
-| P6-T2 | 支付宝回调：callbackPay + 更新 t_pay + 发支付结果 MQ | P6-T1 | app/pay/controller、mq/produce | 回调后 t_pay.status=TRADE_SUCCESS；RocketMQ 发支付结果消息 |
-| P6-T3 | 支付结果消费：order 状态流转 ALREADY_PAID + ticket 座位 SOLD（两消费组） | P6-T2、P4-T3、P2-T3 | app/order/mq、app/ticket/mq | 支付后 t_order.status=10；t_seat.seat_status=2(SOLD) |
-| P6-T4 | 退款：commonRefund + 支付宝退款 + 发退款 MQ + 退款消费 + **修复座位回滚缺口** | P6-T3、P4-T3、P5-T2 | app/pay/service、app/order/mq | 退款后 t_order.status=11/12；**t_seat 座位状态回滚、余票恢复**（原项目缺口已修复） |
-
+| ID | 任务 | 前置 | 影响范围 | 验收标准 | 状态 |
+|----|------|------|----------|----------|------|
+| P6-T1 | 创建支付单：支付宝下单 API + 存 t_pay + 缓存支付结果 | P2-T2、P0-T2 | app/pay/service | POST /pay/create 返回支付宝支付链接；t_pay 有 WAIT_BUYER_PAY 记录 | ✅ |
+| P6-T2 | 支付宝回调：callbackPay + 更新 t_pay + 发支付结果 MQ | P6-T1 | app/pay/controller、mq/produce | 回调后 t_pay.status=TRADE_SUCCESS；RocketMQ 发支付结果消息 | ✅ |
+| P6-T3 | 支付结果消费：order 状态流转 ALREADY_PAID + ticket 座位 SOLD（两消费组） | P6-T2、P4-T3、P2-T3 | app/order/mq、app/ticket/mq | 支付后 t_order.status=10；t_seat.seat_status=2(SOLD) | ✅ |
+| P6-T4 | 退款：commonRefund + 支付宝退款 + 发退款 MQ + 退款消费 + **修复座位回滚缺口** | P6-T3、P4-T3、P5-T2 | app/pay/service、app/order/mq | 退款后 t_order.status=11/12；**t_seat 座位状态回滚、余票恢复**（原项目缺口已修复） | ✅ |
 ## Phase 7：客服基础设施
 
 | ID | 任务 | 前置 | 影响范围 | 验收标准 |

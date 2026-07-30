@@ -16,4 +16,6 @@ public interface OrderItemService {
     List<OrderItemDO> listByOrderSnAndIds(String orderSn, List<String> ids);
 
     int updateStatusByOrderSn(String orderSn, Integer status);
+
+    int updateStatusByIds(List<Long> ids, Integer status);
 }

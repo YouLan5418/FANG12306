@@ -37,6 +37,16 @@ public class OrderItemServiceImpl implements OrderItemService {
     }
 
     @Override
+    public int updateStatusByIds(List<Long> ids, Integer status) {
+        if (ids == null || ids.isEmpty()) {
+            return 0;
+        }
+        return orderItemMapper.update(null, Wrappers.lambdaUpdate(OrderItemDO.class)
+                .in(OrderItemDO::getId, ids)
+                .set(OrderItemDO::getStatus, status));
+    }
+
+    @Override
     public int updateStatusByOrderSn(String orderSn, Integer status) {
         return orderItemMapper.update(null, Wrappers.lambdaUpdate(OrderItemDO.class)
                 .eq(OrderItemDO::getOrderSn, orderSn)

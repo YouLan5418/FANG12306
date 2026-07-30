@@ -17,6 +17,17 @@ public final class OrderRocketMQConstant {
     /** 支付结果回调-订单消费组 */
     public static final String PAY_RESULT_CALLBACK_ORDER_CG = "index12306_pay_pay-result-callback-order_cg";
 
+    /** 支付结果回调-票务消费组（座位置 SOLD） */
+    public static final String PAY_RESULT_CALLBACK_TICKET_CG = "index12306_pay_pay-result-callback-ticket_cg";
+
+    /** 退款结果回调主题 */
+    public static final String REFUND_RESULT_CALLBACK_TOPIC = "index12306_pay_refund-result-callback_topic";
+
+    /** 退款结果回调-订单消费组 */
+    public static final String REFUND_RESULT_CALLBACK_ORDER_CG = "index12306_pay_refund-result-callback-order_cg";
+
+    /** 退款结果回调-票务消费组（座位/余票回滚） */
+    public static final String REFUND_RESULT_CALLBACK_TICKET_CG = "index12306_pay_refund-result-callback-ticket_cg";
     private OrderRocketMQConstant() {
     }
 }

@@ -16,6 +16,12 @@ public interface SeatService {
     /** 按 (trainId, 车厢号, 座位号) 锁座：状态 0->1，返回受影响行数 */
     int lockSeatByPosition(Long trainId, String carriageNumber, String seatNumber);
 
+    /** 锁座 -> 已售：状态 1->2 */
+    int sellSeatByPosition(Long trainId, String carriageNumber, String seatNumber);
+
+    /** 释放座位（退款/关单）：状态 in(1,2)->0 */
+    int releaseSeatByPosition(Long trainId, String carriageNumber, String seatNumber);
+
     /** 批量按位置回滚：状态 1->0 */
     int unlockSeats(List<Long> trainIds, List<String> carriageNumbers, List<String> seatNumbers);
 }

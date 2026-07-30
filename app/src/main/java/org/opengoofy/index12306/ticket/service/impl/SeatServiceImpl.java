@@ -53,6 +53,26 @@ public class SeatServiceImpl implements SeatService {
     }
 
     @Override
+    public int sellSeatByPosition(Long trainId, String carriageNumber, String seatNumber) {
+        return seatMapper.update(null, Wrappers.lambdaUpdate(SeatDO.class)
+                .eq(SeatDO::getTrainId, trainId)
+                .eq(SeatDO::getCarriageNumber, carriageNumber)
+                .eq(SeatDO::getSeatNumber, seatNumber)
+                .eq(SeatDO::getSeatStatus, 1)
+                .set(SeatDO::getSeatStatus, 2));
+    }
+
+    @Override
+    public int releaseSeatByPosition(Long trainId, String carriageNumber, String seatNumber) {
+        return seatMapper.update(null, Wrappers.lambdaUpdate(SeatDO.class)
+                .eq(SeatDO::getTrainId, trainId)
+                .eq(SeatDO::getCarriageNumber, carriageNumber)
+                .eq(SeatDO::getSeatNumber, seatNumber)
+                .in(SeatDO::getSeatStatus, 1, 2)
+                .set(SeatDO::getSeatStatus, 0));
+    }
+
+    @Override
     public int unlockSeats(List<Long> trainIds, List<String> carriageNumbers, List<String> seatNumbers) {
         int updated = 0;
         for (int i = 0; i < trainIds.size(); i++) {

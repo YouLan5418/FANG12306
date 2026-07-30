@@ -13,6 +13,7 @@ import org.opengoofy.index12306.framework.idempotent.annotation.Idempotent;
 import org.opengoofy.index12306.framework.idempotent.enums.IdempotentSceneEnum;
 import org.opengoofy.index12306.framework.idempotent.enums.IdempotentTypeEnum;
 import org.opengoofy.index12306.order.dao.entity.OrderItemDO;
+import org.opengoofy.index12306.pay.dto.req.RefundDetailReqDTO;
 import org.opengoofy.index12306.order.dto.req.CancelTicketOrderReqDTO;
 import org.opengoofy.index12306.order.dto.req.TicketOrderCreateReqDTO;
 import org.opengoofy.index12306.order.dto.req.TicketOrderItemCreateReqDTO;
@@ -58,6 +59,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -237,6 +239,57 @@ public class TicketServiceImpl implements TicketService {
             incrementRemaining(trainId, e.getKey(), detail.getDeparture(), detail.getArrival(), e.getValue());
         }
         log.info("订单 {} 关单回滚完成，座位与余票已恢复", orderSn);
+    }
+
+    @Override
+    public void markSeatsSold(String orderSn) {
+        List<OrderItemDO> items = orderItemService.listByOrderSn(orderSn);
+        if (items.isEmpty()) {
+            return;
+        }
+        Long trainId = items.get(0).getTrainId();
+        for (OrderItemDO item : items) {
+            seatService.sellSeatByPosition(trainId, item.getCarriageNumber(), item.getSeatNumber());
+            // t_ticket -> 已支付（按 username+trainId+座位定位）
+            ticketMapper.update(null, Wrappers.lambdaUpdate(TicketDO.class)
+                    .eq(TicketDO::getTrainId, trainId)
+                    .eq(TicketDO::getCarriageNumber, item.getCarriageNumber())
+                    .eq(TicketDO::getSeatNumber, item.getSeatNumber())
+                    .eq(TicketDO::getUsername, item.getUsername())
+                    .set(TicketDO::getTicketStatus, TicketStatusEnum.PAID.getCode()));
+        }
+    }
+
+    @Override
+    public void rollbackRefund(String orderSn, List<RefundDetailReqDTO> partialDetails) {
+        List<OrderItemDO> items = orderItemService.listByOrderSn(orderSn);
+        if (items.isEmpty()) {
+            return;
+        }
+        Long trainId = items.get(0).getTrainId();
+        var detail = orderService.queryTicketOrderByOrderSn(orderSn);
+        Map<Integer, Integer> seatTypeCount = new HashMap<>();
+        List<OrderItemDO> toRollback;
+        if (partialDetails == null || partialDetails.isEmpty()) {
+            toRollback = items;
+        } else {
+            toRollback = items.stream().filter(it -> partialDetails.stream().anyMatch(d ->
+                    Objects.equals(d.getCarriageNumber(), it.getCarriageNumber())
+                            && Objects.equals(d.getSeatNumber(), it.getSeatNumber()))).toList();
+        }
+        for (OrderItemDO item : toRollback) {
+            seatService.releaseSeatByPosition(trainId, item.getCarriageNumber(), item.getSeatNumber());
+            seatTypeCount.merge(item.getSeatType(), 1, Integer::sum);
+            ticketMapper.update(null, Wrappers.lambdaUpdate(TicketDO.class)
+                    .eq(TicketDO::getTrainId, trainId)
+                    .eq(TicketDO::getCarriageNumber, item.getCarriageNumber())
+                    .eq(TicketDO::getSeatNumber, item.getSeatNumber())
+                    .set(TicketDO::getTicketStatus, TicketStatusEnum.UNPAID.getCode()));
+        }
+        for (Map.Entry<Integer, Integer> e : seatTypeCount.entrySet()) {
+            incrementRemaining(trainId, e.getKey(), detail.getDeparture(), detail.getArrival(), e.getValue());
+        }
+        log.info("订单 {} 退款回滚完成，座位与余票已恢复", orderSn);
     }
 
     // ---------- 私有辅助 ----------

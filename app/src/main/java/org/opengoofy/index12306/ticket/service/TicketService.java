@@ -26,4 +26,10 @@ public interface TicketService {
      * 订单关闭后回滚座位与余票（由 MQ 延迟关单消费或主动取消触发）。
      */
     void rollbackOnOrderClose(String orderSn);
+
+    /** 支付成功：锁座 -> 已售，t_ticket -> 已支付 */
+    void markSeatsSold(String orderSn);
+
+    /** 退款：座位置可用 + 余票恢复 + t_ticket 回滚（修复原项目缺口） */
+    void rollbackRefund(String orderSn, java.util.List<org.opengoofy.index12306.pay.dto.req.RefundDetailReqDTO> partialDetails);
 }

@@ -32,6 +32,12 @@ public interface OrderService {
 
     void statusReversal(OrderStatusReversalDTO requestParam);
 
+    /**
+     * 退款状态流转：ALREADY_PAID/PARTIAL_REFUND -> PARTIAL_REFUND/FULL_REFUND，
+     * 明细置 REFUNDED。partialDetails 为空表示全部退款。
+     */
+    void refundReversal(String orderSn, Integer targetOrderStatus, java.util.List<org.opengoofy.index12306.pay.dto.req.RefundDetailReqDTO> partialDetails);
+
     void payCallbackOrder(PayResultCallbackOrderEvent requestParam);
 
     List<TicketOrderPassengerDetailRespDTO> queryItemByOrderSnAndIds(TicketOrderItemQueryReqDTO requestParam);

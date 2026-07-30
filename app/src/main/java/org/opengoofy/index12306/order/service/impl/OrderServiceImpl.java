@@ -24,6 +24,7 @@ import org.opengoofy.index12306.order.dto.domain.OrderStatusReversalDTO;
 import org.opengoofy.index12306.order.dto.req.CancelTicketOrderReqDTO;
 import org.opengoofy.index12306.order.dto.req.TicketOrderCreateReqDTO;
 import org.opengoofy.index12306.order.dto.req.TicketOrderItemCreateReqDTO;
+import org.opengoofy.index12306.pay.dto.req.RefundDetailReqDTO;
 import org.opengoofy.index12306.order.dto.req.TicketOrderItemQueryReqDTO;
 import org.opengoofy.index12306.order.dto.req.TicketOrderPageQueryReqDTO;
 import org.opengoofy.index12306.order.dto.resp.TicketOrderDetailRespDTO;
@@ -233,6 +234,45 @@ public class OrderServiceImpl implements OrderService {
                 throw new ServiceException(OrderCanalErrorCodeEnum.ORDER_STATUS_REVERSAL_ERROR);
             }
             orderItemService.updateStatusByOrderSn(orderSn, requestParam.getOrderItemStatus());
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @Override
+    public void refundReversal(String orderSn, Integer targetOrderStatus, List<RefundDetailReqDTO> partialDetails) {
+        OrderDO orderDO = orderMapper.selectOne(Wrappers.lambdaQuery(OrderDO.class)
+                .eq(OrderDO::getOrderSn, orderSn));
+        if (orderDO == null) {
+            throw new ServiceException(OrderCanalErrorCodeEnum.ORDER_CANAL_UNKNOWN_ERROR);
+        }
+        if (orderDO.getStatus() != OrderStatusEnum.ALREADY_PAID.getStatus()
+                && orderDO.getStatus() != OrderStatusEnum.PARTIAL_REFUND.getStatus()) {
+            throw new ServiceException(OrderCanalErrorCodeEnum.ORDER_STATUS_REVERSAL_ERROR);
+        }
+        RLock lock = redissonClient.getLock(LOCK_STATUS_REVERSAL_PREFIX + orderSn);
+        if (!lock.tryLock()) {
+            throw new ClientException(OrderCanalErrorCodeEnum.ORDER_CANAL_REPETITION_ERROR);
+        }
+        try {
+            int updated = orderMapper.update(null, Wrappers.lambdaUpdate(OrderDO.class)
+                    .eq(OrderDO::getOrderSn, orderSn)
+                    .set(OrderDO::getStatus, targetOrderStatus));
+            if (updated <= 0) {
+                throw new ServiceException(OrderCanalErrorCodeEnum.ORDER_STATUS_REVERSAL_ERROR);
+            }
+            List<OrderItemDO> items = orderItemService.listByOrderSn(orderSn);
+            if (partialDetails == null || partialDetails.isEmpty()) {
+                orderItemService.updateStatusByOrderSn(orderSn, OrderItemStatusEnum.REFUNDED.getStatus());
+            } else {
+                List<Long> ids = items.stream()
+                        .filter(it -> partialDetails.stream().anyMatch(d ->
+                                Objects.equals(d.getCarriageNumber(), it.getCarriageNumber())
+                                        && Objects.equals(d.getSeatNumber(), it.getSeatNumber())))
+                        .map(OrderItemDO::getId)
+                        .collect(Collectors.toList());
+                orderItemService.updateStatusByIds(ids, OrderItemStatusEnum.REFUNDED.getStatus());
+            }
         } finally {
             lock.unlock();
         }
