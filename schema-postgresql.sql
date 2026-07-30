@@ -6,6 +6,7 @@
 
 -- pgvector 扩展（知识库向量检索）
 CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 -- ============================================================================
 -- 一、用户域（HASH 分区，对应原 ShardingSphere 分片）
@@ -479,6 +480,7 @@ CREATE INDEX idx_kc_category ON knowledge_chunk (category_id);
 CREATE INDEX idx_kc_document ON knowledge_chunk (document_id);
 -- HNSW 向量索引（余弦相似度）
 CREATE INDEX idx_kc_embedding ON knowledge_chunk USING hnsw (embedding vector_cosine_ops);
+CREATE INDEX idx_kc_content_trgm ON knowledge_chunk USING gin (content gin_trgm_ops);
 
 -- ingestion_task：入库任务（简化版，跟踪上传->解析->切片->向量化流水线）
 CREATE TABLE ingestion_task (
@@ -493,14 +495,16 @@ CREATE TABLE ingestion_task (
 );
 CREATE INDEX idx_task_status ON ingestion_task (status);
 
--- chat_session / chat_message：对话历史持久化（MVP 用 Redis 缓存，此表用于后台查看/审计）
+-- chat_session / chat_message：对话历史持久化（JDBC 直读 + 摘要加锁，第八章）
 CREATE TABLE chat_session (
-    id          BIGSERIAL PRIMARY KEY,
-    session_id  VARCHAR(64) NOT NULL UNIQUE,
-    username    VARCHAR(256),
-    title       VARCHAR(256),
-    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id                 BIGSERIAL PRIMARY KEY,
+    session_id         VARCHAR(64) NOT NULL UNIQUE,
+    username           VARCHAR(256),
+    title              VARCHAR(256),
+    summary            TEXT,
+    summary_message_id BIGINT,
+    create_time        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE chat_message (
@@ -514,3 +518,19 @@ CREATE TABLE chat_message (
     create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX idx_chat_msg_session ON chat_message (session_id, create_time);
+
+-- chat_call_log：AI 客服可观测性（每轮 FC 迭代异步写一行，第十章）
+CREATE TABLE chat_call_log (
+    id              BIGSERIAL PRIMARY KEY,
+    session_id      VARCHAR(64) NOT NULL,
+    iteration       INTEGER,
+    tool_name       VARCHAR(64),
+    tool_args       TEXT,          -- 截断存储
+    tool_result     TEXT,          -- 截断存储
+    latency_ms      BIGINT,
+    token_estimate  INTEGER,
+    status          VARCHAR(16),   -- RUNNING/SUCCESS/ERROR
+    error           TEXT,
+    create_time     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_call_log_session ON chat_call_log (session_id, create_time);

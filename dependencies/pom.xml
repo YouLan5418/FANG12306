@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
@@ -26,6 +26,7 @@
         <guava.version>33.1.0-jre</guava.version>
         <alipay-sdk-java.version>4.38.10.ALL</alipay-sdk-java.version>
         <tika.version>2.9.2</tika.version>
+        <aws-sdk.version>2.25.30</aws-sdk.version>
         <caffeine.version>3.1.8</caffeine.version>
         <dozer-core.version>6.5.2</dozer-core.version>
         <transmittable-thread-local.version>2.14.5</transmittable-thread-local.version>
@@ -38,6 +39,15 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
                 <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- AWS S3 SDK BOM (RustFS/MinIO/S3 兼容存储) -->
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>${aws-sdk.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>

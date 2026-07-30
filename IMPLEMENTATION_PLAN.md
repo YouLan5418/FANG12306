@@ -114,10 +114,10 @@
 
 | ID | 任务 | 前置 | 影响范围 | 验收标准 |
 |----|------|------|----------|----------|
-| P7-T1 | ChatClient 抽象 + OllamaChatClient + OpenAIStyleChatClient（同步+流式） | P0-T2、P1-T1 | app/customerservice/chat | 本地 qwen 与云端 API 均能返回回复；流式分片到达 |
+| P7-T1 | ChatClient 抽象 + OpenAIStyleChatClient（流式首包分流）+ ModelHealthStore 断路器 | P0-T2、P1-T1 | app/customerservice/chat | 本地 qwen 与云端 API 均能流式返回；断路器 OPEN 态返回降级文案 |
 | P7-T2 | EmbeddingClient 抽象 + 云端实现 | P0-T2 | app/customerservice/embedding | 输入文本返回 1024 维向量 |
 | P7-T3 | RerankClient + 云端实现（借鉴 BaiLian） | P0-T2 | app/customerservice/rerank | 输入 query+候选 chunks 返回重排序结果 |
-| P7-T4 | SSE 流式基础设施：SseEmitter + 流式回调封装 | P1-T1 | app/customerservice | SSE 端点能推送分片到前端 EventSource |
+| P7-T4 | SSE 流式基础设施：SseEmitter + 心跳/超时/连接管理 + ChatRateLimiter 令牌桶限流 | P1-T1 | app/customerservice | SSE 推送分片；15s 心跳保活；60s 超时断连；超频请求被限流 |
 
 ## Phase 8：RAG 与数据清洗
 
@@ -125,19 +125,19 @@
 |----|------|------|----------|----------|
 | P8-T1 | 文档解析：MarkdownParser + TikaParser（PDF/Word）+ OcrParser 预留接口(Noop) | P2-T4 | app/customerservice/parser | Markdown/PDF/Word 解析出文本；OCR 接口存在返回未实现标记 |
 | P8-T2 | 切片策略：StructureAware（按标题）+ FixedSize + Factory | P8-T1 | app/customerservice/chunk | Markdown 按标题切片；块大小在 min/target/max 范围 |
-| P8-T3 | 入库管道：上传→解析→切片→embedding→存 pgvector + ingestion_task 状态 | P8-T2、P7-T2、P2-T4 | app/customerservice/ingestion | 上传一个 Markdown，knowledge_chunk 有向量记录；task.status=4(完成) |
+| P8-T3 | 入库管道：上传->解析->切片->embedding->存 pgvector + FileStorageService(RustFS) + 状态机重试 + Semaphore(3) 并发限制 | P8-T2、P7-T2、P2-T4 | app/customerservice/ingestion | 上传 Markdown 入库成功；文件存对象存储；失败可重试；并发超 3 被阻塞 |
 | P8-T4 | 知识库后台 API：分类 CRUD（自添加）+ 文档上传 + 任务列表 | P8-T3 | app/customerservice/controller | 新增分类成功；上传文档触发入库；查任务列表返回状态 |
-| P8-T5 | RAG 检索：pgvector 相似检索 + rerank 精排 | P8-T3、P7-T3 | app/customerservice/rag | 查询返回 topK 相关 chunks；rerank 后顺序优化 |
+| P8-T5 | RAG 混合检索：向量(pgvector) + 关键词(ILIKE) RRF 融合 + rerank 精排 + 种子知识文档 | P8-T3、P7-T3 | app/customerservice/rag | 语义查询走向量、错误码精确查询走关键词；rerank 后顺序优化；种子文档可检索 |
 
 ## Phase 9：客服 Agent 编排
 
 | ID | 任务 | 前置 | 影响范围 | 验收标准 |
 |----|------|------|----------|----------|
-| P9-T1 | Function Calling 自实现：工具注册 + tool_calls 解析 + 执行 + 结果回填 | P7-T1 | app/customerservice/fc | LLM 返回 tool_calls 时能解析、执行、回填并二次生成 |
-| P9-T2 | 业务工具定义：queryTicket/queryOrder/queryStation | P9-T1、P5-T1、P4-T2、P2-T3 | app/customerservice/tool | 问"北京到上海车票"→调 queryTicket 返回车次 |
+| P9-T1 | Function Calling 自实现：流式首包分流 + 工具注册 + ToolExecutionContext + 异常回填 + 超时控制 | P7-T1 | app/customerservice/fc | tool_calls 流式检测无双倍调用；工具异常回填 LLM 不崩溃；10s 超时 |
+| P9-T2 | 业务工具：queryTicket/queryOrder(归属校验)/queryStation + 工具结果截断 | P9-T1、P5-T1、P4-T2、P2-T3 | app/customerservice/tool | queryOrder 校验订单归属；结果仅返回关键字段不超上下文 |
 | P9-T3 | searchKnowledge 工具：RAG 检索作为工具 | P9-T1、P8-T5 | app/customerservice/tool | 问"退票手续费"→调 searchKnowledge 返回规则 |
-| P9-T4 | 客服对话编排：加载历史 + LLM 自主决策 + 工具执行 + 流式生成 | P9-T2、P9-T3、P7-T4 | app/customerservice/service | SSE 流式回复；知识类走 RAG、查询类走 FC |
-| P9-T5 | 对话历史：Redis 缓存（按 sessionId）+ 持久化 chat_message | P9-T4、P1-T2、P2-T4 | app/customerservice | 多轮对话记住上下文；后台可查 chat_message 记录 |
+| P9-T4 | 客服对话编排：username 身份传递 + LLM 自主决策 + 工具执行 + 流式生成 + SSE 连接管理 | P9-T2、P9-T3、P7-T4 | app/customerservice/service | SSE 流式回复；身份传递到工具层；断连时取消引擎 |
+| P9-T5 | 对话历史：JDBC 直读(无 Redis 缓存) + 启发式 token 计数 + 摘要加锁（替换原 Redis 缓存方案） | P9-T4、P2-T4 | app/customerservice | 多轮对话记住上下文；token 超阈值触发摘要；并发不覆盖 |
 
 ## Phase 10：前端整合
 

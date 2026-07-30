@@ -29,6 +29,7 @@
 | Rerank | 云端 rerank | 借鉴 BaiLian 实现 |
 | 文档解析 | Apache Tika + 自实现 Markdown | + OcrParser 预留接口 |
 | 本地缓存 | Caffeine | V2 本地锁 |
+| 对象存储 | RustFS（S3 兼容） | 知识库文档原文存储 |
 | 前端 | Vue 3 + Ant Design Vue | + 客服对话窗 |
 
 ---
@@ -199,18 +200,18 @@ sequenceDiagram
 
 ### 5.4 智能客服（RAG + Function Calling 融合）
 
-核心思路：把知识库检索包装成一个工具，与业务查询工具并列，由 LLM 自主决策路由。
+核心思路：把知识库检索包装成一个工具，与业务查询工具并列，由 LLM 自主决策路由。对话历史改为 JDBC 直读（无 Redis 缓存层），RAG 检索改为向量+关键词混合（RRF 融合），FC 引擎始终流式调用（首包分流，无双倍 API 调用）。
 
 ```mermaid
 flowchart LR
-    Q["用户问题"] --> H["加载对话历史 Redis"]
+    Q["用户问题"] --> H["加载对话历史 JDBC 直读"]
     H --> LLM{"LLM 自主决策"}
     LLM -->|查车票| T1["queryTicket"]
     LLM -->|查订单| T2["queryOrder"]
     LLM -->|查站点| T3["queryStation"]
     LLM -->|查知识| T4["searchKnowledge"]
-    T4 --> VEC["pgvector 检索"]
-    VEC --> RR["rerank 精排"]
+    T4 --> RAG2["混合检索 向量+关键词 RRF"]
+    RAG2 --> RR["rerank 精排"]
     T1 --> BIZ["调业务 Service"]
     T2 --> BIZ
     T3 --> BIZ
@@ -272,7 +273,9 @@ CREATE INDEX ON knowledge_chunk (kb_category);
 | 余票 | `train:remaining_ticket:{trainId}_{start}_{end}` (Hash) |
 | 令牌桶 | `ticket:availability_token_bucket:{trainId}` (Hash) |
 | 布隆过滤器 | `user_register_bloom_filter` |
-| 对话历史 | `chat:history:{sessionId}` |
+| 对话摘要锁 | chat:summary:{sessionId} |
+| 对话限流 | chat:rate:{username} |
+| 对话历史 | JDBC 直读 chat_message 表，无 Redis 缓存 |
 | 幂等键 | `idempotent:{prefix}:{key}` |
 | 购票锁 | `lock:purchase_tickets:{trainId}` |
 
@@ -289,6 +292,7 @@ CREATE INDEX ON knowledge_chunk (kb_category);
 | LLM（Ollama/云端API） | 客服对话 + 工具决策 | 智能客服必须 |
 | Embedding/Rerank 云端 | 向量化/精排 | RAG 必须 |
 | Apache Tika | 文档解析 | 知识库入库必须 |
+| RustFS（S3 兼容） | 知识库文档存储 | 知识库入库必须 |
 | Caffeine | 本地锁 | V2 优化 |
 
 ---

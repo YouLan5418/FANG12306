@@ -1,4 +1,4 @@
-﻿# 12306 重构版本地开发中间件编排
+# 12306 重构版本地开发中间件编排
 # 用法: docker compose up -d
 # 说明: PG/Redis 已有运行容器可继续使用;此文件用于环境复现与一键拉起。
 services:
@@ -52,6 +52,19 @@ services:
       - ./docker/rocketmq/broker/broker.conf:/home/rocketmq/rocketmq-5.3.1/conf/broker.conf
     command: sh mqbroker -c /home/rocketmq/rocketmq-5.3.1/conf/broker.conf
 
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: rustfs
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    environment:
+      RUSTFS_ACCESS_KEY: index12306
+      RUSTFS_SECRET_KEY: index12306
+    volumes:
+      - rustfs_data:/data
+
 volumes:
   postgres_data:
   redis_data:
+  rustfs_data:

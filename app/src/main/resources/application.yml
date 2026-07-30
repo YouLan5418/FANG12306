@@ -84,3 +84,31 @@ logging:
   level:
     root: info
     org.opengoofy.index12306: debug
+
+# AI 客服
+ai:
+  chat:
+    provider: ollama
+    base-url: http://localhost:11434/v1
+    api-key: ollama
+    model: qwen2.5:7b
+    temperature: 0.7
+    timeout-ms: 60000
+  embedding:
+    base-url: https://api.example.com/v1
+    api-key: sk-xxx
+    model: bge-m3
+    dimension: 1024
+  rerank:
+    base-url: https://api.example.com/v1
+    api-key: sk-xxx
+    model: gte-rerank
+    top-n: 3
+
+# 文件存储（RustFS / S3 兼容）
+file-storage:
+  endpoint: http://localhost:9000
+  access-key: index12306
+  secret-key: index12306
+  bucket: index12306-kb
+  region: us-east-1

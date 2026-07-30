@@ -21,6 +21,8 @@ public class ChatSessionDO {
     private String sessionId;
     private String username;
     private String title;
+    private String summary;
+    private Long summaryMessageId;
 
     @TableField(fill = FieldFill.INSERT)
     private Date createTime;
