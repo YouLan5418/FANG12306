@@ -34,8 +34,11 @@
 |-------|------|------|
 | P0 工程骨架与环境 | ✅ 基本完成（P0-T4 CI 暂缓） | 骨架/连接/库表就绪；P0-T4 GitHub Actions 按用户要求暂不补 |
 | P1 framework 基础层 | ✅ 完成 | convention/cache/idempotent/distributedid/common 全部编译通过，含 4 个单测 |
-| P2 数据访问层 | ✅ 完成 | 四个域实体/Mapper 全部完成，23 个 Mapper 单测通过；含 pgvector VectorTypeHandler，knowledge_chunk 向量插入与余弦检索验证通过。至此 M1 里程碑达成 |
-| P3-P11 | ⬜ 未开始 | - |
+| P2 数据访问层 | ✅ 完成 | 四个域实体/Mapper 完成，含 pgvector VectorTypeHandler |
+| P3 用户域业务 | ✅ 完成 | 注册/登录/乘车人/注销全链路，7 个用例通过。M2 里程碑达成 |
+| P4 订单域业务 | ✅ 完成 | 建单(三表+延迟关单MQ)/查询分页/状态机流转，5 个用例通过 |
+| P5-P11 | ⬜ 未开始 | - |
+
 
 **已通过自评审并修复**：清理 cache 模块死代码（CacheGetFilter/CacheGetIfAbsent 未使用的接口与类）；修复 SecurityProperties 空密钥覆盖默认值导致 JWT WeakKeyException 的问题（空值时回退默认密钥）。**P2-T1 验证结论**：MyBatis-Plus Wrapper 条件参数不经过 TypeHandler，加密字段（id_card/phone/mail/address）作查询条件时需在业务层先显式加密再入参。
 
@@ -81,11 +84,11 @@
 
 ## Phase 4：订单域业务
 
-| ID | 任务 | 前置 | 影响范围 | 验收标准 |
-|----|------|------|----------|----------|
-| P4-T1 | 订单创建：订单号生成 + t_order/t_order_item/t_order_item_passenger 写入 + 发延迟关单 MQ | P2-T2、P1-T4、P0-T2 | app/order/service | createTicketOrder 返回 orderSn；三表有记录；RocketMQ 有延迟消息(delayLevel=14) |
-| P4-T2 | 订单查询/分页 | P2-T2 | app/order/service | 按 order_sn 查详情；按 user_id 分页返回 |
-| P4-T3 | 订单状态流转：statusReversal + payCallbackOrder + closeTickOrder（含状态校验防重复） | P2-T2、P1-T2 | app/order/service | 状态机校验：非 PENDING_PAYMENT 状态流转被拒；Redisson 锁生效 |
+| ID | 任务 | 前置 | 影响范围 | 验收标准 | 状态 |
+|----|------|------|----------|----------|------|
+| P4-T1 | 订单创建：订单号生成 + t_order/t_order_item/t_order_item_passenger 写入 + 发延迟关单 MQ | P2-T2、P1-T4、P0-T2 | app/order/service | createTicketOrder 返回 orderSn；三表有记录；RocketMQ 有延迟消息(delayLevel=14) | ✅ 完成 | ✅ 完成 |
+| P4-T2 | 订单查询/分页 | P2-T2 | app/order/service | 按 order_sn 查详情；按 user_id 分页返回 | ✅ 完成 |
+| P4-T3 | 订单状态流转：statusReversal + payCallbackOrder + closeTickOrder（含状态校验防重复） | P2-T2、P1-T2 | app/order/service | 状态机校验：非 PENDING_PAYMENT 状态流转被拒；Redisson 锁生效 | ✅ 完成 | ✅ 完成 |
 
 ## Phase 5：购票域业务
 
