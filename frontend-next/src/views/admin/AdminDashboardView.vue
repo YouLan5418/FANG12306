@@ -2,7 +2,10 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from "vue"
 import { ElMessage, ElMessageBox } from "element-plus"
 import { Plus, Refresh, Search, View } from "@element-plus/icons-vue"
-import * as echarts from "echarts"
+import * as echarts from "echarts/core"
+import { BarChart, LineChart, PieChart } from "echarts/charts"
+import { GridComponent, LegendComponent, TooltipComponent } from "echarts/components"
+import { CanvasRenderer } from "echarts/renderers"
 import {
   calibrateRemainingTickets,
   cancelAdminOrder,
@@ -54,9 +57,20 @@ const trainDetail = ref<AdminTrainDetail | null>(null)
 const orderChartRef = ref<HTMLDivElement>()
 const revenueChartRef = ref<HTMLDivElement>()
 const statusChartRef = ref<HTMLDivElement>()
-let orderChart: echarts.ECharts | null = null
-let revenueChart: echarts.ECharts | null = null
-let statusChart: echarts.ECharts | null = null
+type EChartsInstance = echarts.ECharts
+let orderChart: EChartsInstance | null = null
+let revenueChart: EChartsInstance | null = null
+let statusChart: EChartsInstance | null = null
+
+echarts.use([
+  LineChart,
+  BarChart,
+  PieChart,
+  GridComponent,
+  TooltipComponent,
+  LegendComponent,
+  CanvasRenderer
+])
 
 const userQuery = reactive({ page: 1, size: 10, total: 0, keyword: "" })
 const orderQuery = reactive({
@@ -140,7 +154,7 @@ const groupedStations = computed(() => {
   }))
 })
 
-function renderCharts() {
+async function renderCharts() {
   if (!orderChartRef.value || !revenueChartRef.value || !statusChartRef.value) return
   orderChart = orderChart || echarts.init(orderChartRef.value)
   revenueChart = revenueChart || echarts.init(revenueChartRef.value)
@@ -197,7 +211,7 @@ async function loadDashboard() {
     revenueTrend.value = revenue
     orderStatus.value = status.byStatus || {}
     await nextTick()
-    renderCharts()
+    await renderCharts()
   } finally {
     dashboardLoading.value = false
   }
