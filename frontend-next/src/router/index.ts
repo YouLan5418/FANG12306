@@ -50,12 +50,6 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: "订单退款", requiresAuth: true }
       },
       {
-        path: "customer-service",
-        name: "customerService",
-        component: () => import("@/views/customer/CustomerServiceView.vue"),
-        meta: { title: "智能客服", requiresAuth: true }
-      },
-      {
         path: "admin",
         name: "adminDashboard",
         component: () => import("@/views/admin/AdminDashboardView.vue"),

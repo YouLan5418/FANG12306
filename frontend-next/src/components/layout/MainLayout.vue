@@ -1,15 +1,9 @@
 <script setup lang="ts">
 import { computed } from "vue"
 import { useRoute, useRouter } from "vue-router"
-import {
-  ChatDotRound,
-  DataBoard,
-  House,
-  SwitchButton,
-  Tickets,
-  User
-} from "@element-plus/icons-vue"
+import { DataBoard, House, SwitchButton, Tickets, User } from "@element-plus/icons-vue"
 import { useAuthStore } from "@/stores/auth"
+import CustomerServiceWidget from "@/components/customer/CustomerServiceWidget.vue"
 
 const route = useRoute()
 const router = useRouter()
@@ -57,10 +51,6 @@ function logout() {
               <el-icon><House /></el-icon>
               <span>我的订单</span>
             </el-menu-item>
-            <el-menu-item index="/customer-service">
-              <el-icon><ChatDotRound /></el-icon>
-              <span>智能客服</span>
-            </el-menu-item>
             <el-menu-item v-if="authStore.isAdmin" index="/admin">
               <el-icon><DataBoard /></el-icon>
               <span>管理后台</span>
@@ -82,6 +72,8 @@ function logout() {
         </el-main>
       </el-container>
     </el-container>
+
+    <CustomerServiceWidget />
   </div>
 </template>
 
