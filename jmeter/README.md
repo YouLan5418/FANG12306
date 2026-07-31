@@ -28,3 +28,10 @@
 - `Throughput`：吞吐量。
 - 后端日志：重点看 ERROR、连接池耗尽、Redis 超时、RocketMQ 重试。
 - PostgreSQL/Redis/Docker：观察 CPU、内存、连接数。
+
+## 极限压测脚本
+
+- `index12306-read-200.jmx`：读接口中高并发阶梯。
+- `index12306-read-500.jmx`：读接口本机极限探索。
+- `index12306-purchase-50.jmx`：真实下单 50 并发探索，使用 `users-purchase-50.csv`。
+- `极限压测方案.md`：记录阶梯设计、停测标准和一致性检查 SQL。
