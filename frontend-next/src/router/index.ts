@@ -26,10 +26,28 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: "车票查询" }
       },
       {
+        path: "purchase",
+        name: "purchaseConfirm",
+        component: () => import("@/views/ticket/PurchaseConfirmView.vue"),
+        meta: { title: "确认订单", requiresAuth: true }
+      },
+      {
         path: "orders",
         name: "orders",
         component: () => import("@/views/order/OrderListView.vue"),
         meta: { title: "我的订单", requiresAuth: true }
+      },
+      {
+        path: "payment/:orderSn",
+        name: "payment",
+        component: () => import("@/views/pay/PaymentView.vue"),
+        meta: { title: "订单支付", requiresAuth: true }
+      },
+      {
+        path: "refund/:orderSn",
+        name: "refund",
+        component: () => import("@/views/pay/RefundView.vue"),
+        meta: { title: "订单退款", requiresAuth: true }
       },
       {
         path: "customer-service",

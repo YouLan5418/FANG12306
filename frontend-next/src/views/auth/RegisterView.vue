@@ -10,8 +10,11 @@ const form = reactive({
   username: "",
   password: "",
   realName: "",
+  idType: 0,
+  idCard: "",
   phone: "",
-  mail: ""
+  mail: "",
+  region: "0"
 })
 
 async function submit() {
@@ -34,6 +37,9 @@ async function submit() {
         </el-form-item>
         <el-form-item label="真实姓名">
           <el-input v-model="form.realName" />
+        </el-form-item>
+        <el-form-item label="证件号码">
+          <el-input v-model="form.idCard" />
         </el-form-item>
         <el-form-item label="手机号">
           <el-input v-model="form.phone" />

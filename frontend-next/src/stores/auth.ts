@@ -15,10 +15,10 @@ export const useAuthStore = defineStore("auth", () => {
   const cachedUser = localStorage.getItem(USER_KEY)
   if (cachedUser) {
     try {
-      const user = JSON.parse(cachedUser) as Omit<LoginResp, "token">
+      const user = JSON.parse(cachedUser) as Omit<LoginResp, "accessToken">
       username.value = user.username || ""
       realName.value = user.realName || ""
-      role.value = user.role || "USER"
+      role.value = user.role === 1 || user.role === "ADMIN" ? "ADMIN" : "USER"
     } catch {
       localStorage.removeItem(USER_KEY)
     }
@@ -29,12 +29,12 @@ export const useAuthStore = defineStore("auth", () => {
   const displayName = computed(() => realName.value || username.value || "未登录")
 
   function setSession(payload: LoginResp) {
-    token.value = payload.token
+    token.value = payload.accessToken
     username.value = payload.username
     realName.value = payload.realName || ""
-    role.value = payload.role || "USER"
+    role.value = payload.role === 1 || payload.role === "ADMIN" ? "ADMIN" : "USER"
 
-    localStorage.setItem(TOKEN_KEY, payload.token)
+    localStorage.setItem(TOKEN_KEY, payload.accessToken)
     localStorage.setItem(
       USER_KEY,
       JSON.stringify({

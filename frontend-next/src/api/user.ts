@@ -1,8 +1,8 @@
 import request, { unwrap } from "./request"
-import type { CurrentUser, LoginReq, LoginResp, RegisterReq } from "@/types/user"
+import type { CurrentUser, LoginReq, LoginResp, Passenger, RegisterReq } from "@/types/user"
 
 export function login(data: LoginReq) {
-  return unwrap<LoginResp>(request.post("/user-service/login", data))
+  return unwrap<LoginResp>(request.post("/user-service/v1/login", data))
 }
 
 export function register(data: RegisterReq) {
@@ -10,9 +10,13 @@ export function register(data: RegisterReq) {
 }
 
 export function logout() {
-  return unwrap<void>(request.post("/user-service/logout"))
+  return unwrap<void>(request.get("/user-service/logout"))
 }
 
 export function queryCurrentUser() {
   return unwrap<CurrentUser>(request.get("/user-service/query"))
+}
+
+export function queryPassengers() {
+  return unwrap<Passenger[]>(request.get("/user-service/passenger/query"))
 }

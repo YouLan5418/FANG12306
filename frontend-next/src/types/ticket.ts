@@ -4,25 +4,64 @@ export interface StationOption {
 }
 
 export interface TicketSearchReq {
-  fromStation: string
-  toStation: string
-  departureDate: string
+  departure: string
+  arrival: string
+  current?: number
+  size?: number
 }
 
 export interface SeatTypeStock {
-  seatType: string
-  seatTypeName: string
+  seatType: number
   price: number
-  remaining: number
+  quantity: number
 }
 
 export interface TicketItem {
   trainId: string
   trainNumber: string
-  fromStation: string
-  toStation: string
+  trainType: number
+  departure: string
+  arrival: string
   departureTime: string
   arrivalTime: string
-  duration: string
-  seatTypes: SeatTypeStock[]
+  seatClassList: SeatTypeStock[]
+}
+
+export interface TicketPageResp {
+  trainList: TicketItem[]
+  current: number
+  size: number
+  total: number
+}
+
+export interface PurchasePassenger {
+  passengerId: string
+  seatType: number
+  ticketType?: number
+}
+
+export interface PurchaseTicketReq {
+  trainId: string
+  departure: string
+  arrival: string
+  passengers: PurchasePassenger[]
+  chooseSeats?: string[]
+}
+
+export interface PurchaseTicketDetail {
+  passengerId: string
+  carriageNumber: string
+  seatNumber: string
+  seatType: number
+  amount: number
+  idType: number
+  idCard: string
+  phone: string
+  realName: string
+  ticketType: number
+}
+
+export interface PurchaseTicketResp {
+  orderSn: string
+  ticketOrderDetailResults: PurchaseTicketDetail[]
 }

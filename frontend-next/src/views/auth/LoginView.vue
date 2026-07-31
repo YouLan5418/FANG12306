@@ -11,7 +11,7 @@ const route = useRoute()
 const authStore = useAuthStore()
 
 const form = reactive({
-  username: "",
+  usernameOrMailOrPhone: "",
   password: ""
 })
 
@@ -35,8 +35,12 @@ async function submit() {
       <el-card class="auth-card" shadow="never">
         <h2>账号登录</h2>
         <el-form :model="form" label-position="top" @submit.prevent="submit">
-          <el-form-item label="用户名">
-            <el-input v-model="form.username" :prefix-icon="User" autocomplete="username" />
+          <el-form-item label="用户名 / 手机号 / 邮箱">
+            <el-input
+              v-model="form.usernameOrMailOrPhone"
+              :prefix-icon="User"
+              autocomplete="username"
+            />
           </el-form-item>
           <el-form-item label="密码">
             <el-input
