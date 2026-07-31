@@ -10,6 +10,18 @@ const router = useRouter()
 const authStore = useAuthStore()
 
 const activeMenu = computed(() => route.path)
+const navItems = computed(() => {
+  const items = [
+    { path: "/tickets", label: "车票", icon: Tickets },
+    { path: "/orders", label: "订单", icon: House }
+  ]
+
+  if (authStore.isAdmin) {
+    items.push({ path: "/admin", label: "管理", icon: DataBoard })
+  }
+
+  return items
+})
 
 function logout() {
   authStore.clearSession()
@@ -43,17 +55,9 @@ function logout() {
       <el-container>
         <el-aside class="app-aside" width="220px">
           <el-menu :default-active="activeMenu" router>
-            <el-menu-item index="/tickets">
-              <el-icon><Tickets /></el-icon>
-              <span>车票查询</span>
-            </el-menu-item>
-            <el-menu-item index="/orders">
-              <el-icon><House /></el-icon>
-              <span>我的订单</span>
-            </el-menu-item>
-            <el-menu-item v-if="authStore.isAdmin" index="/admin">
-              <el-icon><DataBoard /></el-icon>
-              <span>管理后台</span>
+            <el-menu-item v-for="item in navItems" :key="item.path" :index="item.path">
+              <el-icon><component :is="item.icon" /></el-icon>
+              <span>{{ item.label === "车票" ? "车票查询" : item.label === "订单" ? "我的订单" : "管理后台" }}</span>
             </el-menu-item>
           </el-menu>
         </el-aside>
@@ -72,6 +76,20 @@ function logout() {
         </el-main>
       </el-container>
     </el-container>
+
+    <nav class="bottom-nav" aria-label="移动端主导航">
+      <button
+        v-for="item in navItems"
+        :key="item.path"
+        class="bottom-nav-item"
+        :class="{ active: activeMenu === item.path }"
+        type="button"
+        @click="router.push(item.path)"
+      >
+        <el-icon><component :is="item.icon" /></el-icon>
+        <span>{{ item.label }}</span>
+      </button>
+    </nav>
 
     <CustomerServiceWidget />
   </div>
@@ -153,8 +171,13 @@ function logout() {
   background: #e8f1fb;
 }
 
+.bottom-nav {
+  display: none;
+}
+
 @media (max-width: 760px) {
   .app-header {
+    height: 56px;
     padding: 0 14px;
   }
 
@@ -162,12 +185,81 @@ function logout() {
     display: none;
   }
 
+  .header-actions {
+    gap: 6px;
+  }
+
+  .header-actions :deep(.el-tag) {
+    max-width: 112px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .app-aside {
     display: none;
   }
 
   .app-main {
-    padding-top: 16px;
+    padding: 16px 0 88px;
+  }
+
+  .page-content {
+    width: min(100vw - 24px, 720px);
+  }
+
+  .page-title {
+    margin-bottom: 14px;
+  }
+
+  .page-title h1 {
+    font-size: 22px;
+  }
+
+  .page-title .el-icon {
+    width: 38px;
+    height: 38px;
+  }
+
+  .bottom-nav {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 1100;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+    padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+    border-top: 1px solid #dbe3ec;
+    background: rgb(255 255 255 / 96%);
+    box-shadow: 0 -10px 28px rgb(15 23 42 / 10%);
+    backdrop-filter: blur(10px);
+  }
+
+  .bottom-nav-item {
+    display: grid;
+    min-width: 0;
+    min-height: 50px;
+    place-items: center;
+    gap: 3px;
+    color: #64748b;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .bottom-nav-item .el-icon {
+    width: 21px;
+    height: 21px;
+  }
+
+  .bottom-nav-item.active {
+    color: #123c69;
+    background: #e8f1fb;
+    font-weight: 700;
   }
 }
 </style>

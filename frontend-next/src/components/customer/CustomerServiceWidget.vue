@@ -199,12 +199,16 @@ function send() {
 @media (max-width: 760px) {
   .customer-widget {
     right: 16px;
-    bottom: 16px;
+    bottom: calc(86px + env(safe-area-inset-bottom));
   }
 
   .float-button {
     width: 52px;
     height: 52px;
+  }
+
+  .chat-panel {
+    height: min(460px, calc(100vh - 172px));
   }
 }
 </style>
