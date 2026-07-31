@@ -38,6 +38,12 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: "我的订单", requiresAuth: true }
       },
       {
+        path: "profile",
+        name: "profile",
+        component: () => import("@/views/user/ProfileView.vue"),
+        meta: { title: "我的信息", requiresAuth: true }
+      },
+      {
         path: "payment/:orderSn",
         name: "payment",
         component: () => import("@/views/pay/PaymentView.vue"),

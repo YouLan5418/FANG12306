@@ -12,12 +12,13 @@ const authStore = useAuthStore()
 const activeMenu = computed(() => route.path)
 const navItems = computed(() => {
   const items = [
-    { path: "/tickets", label: "车票", icon: Tickets },
-    { path: "/orders", label: "订单", icon: House }
+    { path: "/tickets", shortLabel: "车票", fullLabel: "车票查询", icon: Tickets },
+    { path: "/orders", shortLabel: "订单", fullLabel: "我的订单", icon: House },
+    { path: "/profile", shortLabel: "我的", fullLabel: "我的信息", icon: User }
   ]
 
   if (authStore.isAdmin) {
-    items.push({ path: "/admin", label: "管理", icon: DataBoard })
+    items.push({ path: "/admin", shortLabel: "管理", fullLabel: "管理后台", icon: DataBoard })
   }
 
   return items
@@ -57,7 +58,7 @@ function logout() {
           <el-menu :default-active="activeMenu" router>
             <el-menu-item v-for="item in navItems" :key="item.path" :index="item.path">
               <el-icon><component :is="item.icon" /></el-icon>
-              <span>{{ item.label === "车票" ? "车票查询" : item.label === "订单" ? "我的订单" : "管理后台" }}</span>
+              <span>{{ item.fullLabel }}</span>
             </el-menu-item>
           </el-menu>
         </el-aside>
@@ -77,7 +78,11 @@ function logout() {
       </el-container>
     </el-container>
 
-    <nav class="bottom-nav" aria-label="移动端主导航">
+    <nav
+      class="bottom-nav"
+      :style="{ gridTemplateColumns: `repeat(${navItems.length}, minmax(0, 1fr))` }"
+      aria-label="移动端主导航"
+    >
       <button
         v-for="item in navItems"
         :key="item.path"
@@ -87,7 +92,7 @@ function logout() {
         @click="router.push(item.path)"
       >
         <el-icon><component :is="item.icon" /></el-icon>
-        <span>{{ item.label }}</span>
+        <span>{{ item.shortLabel }}</span>
       </button>
     </nav>
 
@@ -228,7 +233,6 @@ function logout() {
     left: 0;
     z-index: 1100;
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 4px;
     padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
     border-top: 1px solid #dbe3ec;

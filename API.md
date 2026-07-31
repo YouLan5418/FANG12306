@@ -80,9 +80,19 @@
 {
   "realName": "张三",
   "phone": "13900000001",
-  "mail": "new@example.com"
+  "mail": "new@example.com",
+  "region": "北京",
+  "postCode": "100000",
+  "address": "北京市海淀区"
 }
 ```
+
+前端“我的信息”页面使用：
+
+- 桌面端侧边栏入口：我的信息。
+- 手机端底边栏入口：我的。
+- 未登录访问 `/profile` 会被路由守卫跳转到登录页。
+- 页面详情读取 `/api/user-service/actual/query`，保存修改调用 `/api/user-service/update`。
 
 ### 乘车人
 

@@ -1,5 +1,13 @@
 import request, { unwrap } from "./request"
-import type { CurrentUser, LoginReq, LoginResp, Passenger, RegisterReq } from "@/types/user"
+import type {
+  CurrentUser,
+  LoginReq,
+  LoginResp,
+  Passenger,
+  RegisterReq,
+  UserProfile,
+  UserUpdateReq
+} from "@/types/user"
 
 export function login(data: LoginReq) {
   return unwrap<LoginResp>(request.post("/user-service/v1/login", data))
@@ -15,6 +23,14 @@ export function logout() {
 
 export function queryCurrentUser() {
   return unwrap<CurrentUser>(request.get("/user-service/query"))
+}
+
+export function queryUserProfile() {
+  return unwrap<UserProfile>(request.get("/user-service/actual/query"))
+}
+
+export function updateUserProfile(data: UserUpdateReq) {
+  return unwrap<void>(request.post("/user-service/update", data))
 }
 
 export function queryPassengers() {

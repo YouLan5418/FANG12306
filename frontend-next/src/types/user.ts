@@ -25,9 +25,30 @@ export interface RegisterReq {
 }
 
 export interface CurrentUser {
+  id?: string
   username: string
   realName?: string
-  role: UserRole
+  idType?: number
+  idCard?: string
+  phone?: string
+  mail?: string
+  address?: string
+  region?: string
+  postCode?: string
+  role?: UserRole
+}
+
+export interface UserProfile extends CurrentUser {
+  id: string
+}
+
+export interface UserUpdateReq {
+  realName?: string
+  phone?: string
+  mail?: string
+  region?: string
+  postCode?: string
+  address?: string
 }
 
 export interface Passenger {
