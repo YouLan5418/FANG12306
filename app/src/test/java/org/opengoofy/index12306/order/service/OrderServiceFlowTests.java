@@ -1,6 +1,8 @@
 package org.opengoofy.index12306.order.service;
 
 import org.junit.jupiter.api.Test;
+import org.opengoofy.index12306.common.core.UserContext;
+import org.opengoofy.index12306.common.core.UserInfoDTO;
 import org.opengoofy.index12306.framework.convention.exception.AbstractException;
 import org.opengoofy.index12306.framework.convention.page.PageResponse;
 import org.opengoofy.index12306.order.common.enums.OrderItemStatusEnum;
@@ -15,6 +17,7 @@ import org.opengoofy.index12306.order.dto.req.TicketOrderCreateReqDTO;
 import org.opengoofy.index12306.order.dto.req.TicketOrderItemCreateReqDTO;
 import org.opengoofy.index12306.order.dto.req.TicketOrderPageQueryReqDTO;
 import org.opengoofy.index12306.order.dto.resp.TicketOrderDetailRespDTO;
+import org.opengoofy.index12306.order.dto.resp.TicketOrderDetailSelfRespDTO;
 import org.opengoofy.index12306.order.mq.event.PayResultCallbackOrderEvent;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -129,6 +132,26 @@ class OrderServiceFlowTests {
         PageResponse<TicketOrderDetailRespDTO> page = orderService.pageTicketOrder(pageReq);
         assertTrue(page.getTotal() >= 1);
         assertEquals(1, page.getRecords().size());
+    }
+
+    @Test
+    void testPageSelfTicketOrderUsesLoginUsernameWhenUserIdMissing() {
+        String orderSn = orderService.createTicketOrder(buildCreateReq());
+        UserContext.setUser(UserInfoDTO.builder()
+                .username(USERNAME)
+                .build());
+        try {
+            TicketOrderPageQueryReqDTO pageReq = new TicketOrderPageQueryReqDTO();
+            pageReq.setCurrent(1L);
+            pageReq.setSize(10L);
+            PageResponse<TicketOrderDetailSelfRespDTO> page = orderService.pageSelfTicketOrder(pageReq);
+
+            assertTrue(page.getTotal() >= 1);
+            assertTrue(page.getRecords().stream()
+                    .anyMatch(each -> orderSn.equals(each.getOrderSn())));
+        } finally {
+            UserContext.removeUser();
+        }
     }
 
     @Test

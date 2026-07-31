@@ -20,6 +20,8 @@ public interface OrderService {
 
     TicketOrderDetailRespDTO queryTicketOrderByOrderSn(String orderSn);
 
+    TicketOrderDetailRespDTO queryTicketOrderBasicByOrderSn(String orderSn);
+
     PageResponse<TicketOrderDetailRespDTO> pageTicketOrder(TicketOrderPageQueryReqDTO requestParam);
 
     PageResponse<TicketOrderDetailSelfRespDTO> pageSelfTicketOrder(TicketOrderPageQueryReqDTO requestParam);

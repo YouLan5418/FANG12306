@@ -78,6 +78,16 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
+    public TicketOrderDetailRespDTO queryTicketOrderBasicByOrderSn(String orderSn) {
+        OrderDO orderDO = orderMapper.selectOne(Wrappers.lambdaQuery(OrderDO.class)
+                .eq(OrderDO::getOrderSn, orderSn));
+        if (orderDO == null) {
+            throw new ClientException("订单不存在");
+        }
+        return BeanUtil.copyProperties(orderDO, TicketOrderDetailRespDTO.class);
+    }
+
+    @Override
     public PageResponse<TicketOrderDetailRespDTO> pageTicketOrder(TicketOrderPageQueryReqDTO requestParam) {
         Page<OrderDO> page = new Page<>(requestParam.getCurrent(), requestParam.getSize());
         IPage<OrderDO> orderPage = orderMapper.selectPage(page, Wrappers.lambdaQuery(OrderDO.class)
@@ -98,11 +108,13 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     public PageResponse<TicketOrderDetailSelfRespDTO> pageSelfTicketOrder(TicketOrderPageQueryReqDTO requestParam) {
-        // 当前登录用户名查询自己的订单（按 userId 路由）
-        Long userId = requestParam.getUserId();
+        String username = UserContext.getUsername();
+        if (username == null) {
+            throw new ClientException("用户未登录或登录态已失效");
+        }
         Page<OrderDO> page = new Page<>(requestParam.getCurrent(), requestParam.getSize());
         IPage<OrderDO> orderPage = orderMapper.selectPage(page, Wrappers.lambdaQuery(OrderDO.class)
-                .eq(OrderDO::getUserId, userId)
+                .eq(OrderDO::getUsername, username)
                 .orderByDesc(OrderDO::getOrderTime));
         List<TicketOrderDetailSelfRespDTO> records = orderPage.getRecords().stream()
                 .map(each -> {
@@ -270,7 +282,7 @@ public class OrderServiceImpl implements OrderService {
             if (updated <= 0) {
                 throw new ServiceException(OrderCanalErrorCodeEnum.ORDER_STATUS_REVERSAL_ERROR);
             }
-            List<OrderItemDO> items = orderItemService.listByOrderSn(orderSn);
+            List<OrderItemDO> items = orderItemService.listSeatOperationItemsByOrderSn(orderSn);
             if (partialDetails == null || partialDetails.isEmpty()) {
                 orderItemService.updateStatusByOrderSn(orderSn, OrderItemStatusEnum.REFUNDED.getStatus());
             } else {

@@ -10,14 +10,18 @@ import org.opengoofy.index12306.order.dao.entity.OrderDO;
 import org.opengoofy.index12306.order.dao.mapper.OrderMapper;
 import org.opengoofy.index12306.ticket.common.constant.TicketCacheConstant;
 import org.opengoofy.index12306.ticket.dao.entity.SeatDO;
+import org.opengoofy.index12306.ticket.dao.entity.StationDO;
 import org.opengoofy.index12306.ticket.dao.entity.TrainDO;
+import org.opengoofy.index12306.ticket.dao.entity.TrainStationDO;
 import org.opengoofy.index12306.ticket.dao.entity.TrainStationPriceDO;
 import org.opengoofy.index12306.ticket.dao.entity.TrainStationRelationDO;
 import org.opengoofy.index12306.ticket.dao.mapper.SeatMapper;
+import org.opengoofy.index12306.ticket.dao.mapper.StationMapper;
 import org.opengoofy.index12306.ticket.dao.mapper.TicketMapper;
 import org.opengoofy.index12306.ticket.dao.mapper.TrainMapper;
 import org.opengoofy.index12306.ticket.dao.mapper.TrainStationPriceMapper;
 import org.opengoofy.index12306.ticket.dao.mapper.TrainStationRelationMapper;
+import org.opengoofy.index12306.ticket.dao.mapper.TrainStationMapper;
 import org.opengoofy.index12306.ticket.dto.req.CancelTicketReqDTO;
 import org.opengoofy.index12306.ticket.dto.req.PurchaseTicketPassengerDetailDTO;
 import org.opengoofy.index12306.ticket.dto.req.PurchaseTicketReqDTO;
@@ -52,10 +56,13 @@ class TicketServiceFlowTests {
 
     @Autowired private TicketService ticketService;
     @Autowired private TrainMapper trainMapper;
+    @Autowired private TrainStationMapper trainStationMapper;
     @Autowired private TrainStationRelationMapper relationMapper;
     @Autowired private TrainStationPriceMapper priceMapper;
     @Autowired private SeatMapper seatMapper;
+    @Autowired private StationMapper stationMapper;
     @Autowired private TicketMapper ticketMapper;
+    @Autowired private SeatService seatService;
     @Autowired private OrderMapper orderMapper;
     @Autowired private UserLoginService userLoginService;
     @Autowired private PassengerService passengerService;
@@ -121,14 +128,40 @@ class TicketServiceFlowTests {
         req.setCurrent(1L);
         req.setSize(10L);
         TicketPageQueryRespDTO resp = ticketService.pageListTicketQuery(req);
-        assertEquals(1, resp.getTrainList().size());
+        assertTrue(resp.getTrainList().stream()
+                .anyMatch(each -> String.valueOf(trainId).equals(each.getTrainId())));
         // 二等座余票应为 5
-        int secondQty = resp.getTrainList().get(0).getSeatClassList().stream()
+        var seededTrain = resp.getTrainList().stream()
+                .filter(each -> String.valueOf(trainId).equals(each.getTrainId()))
+                .findFirst()
+                .orElseThrow();
+        int secondQty = seededTrain.getSeatClassList().stream()
                 .filter(s -> s.getSeatType() == 2).findFirst().get().getQuantity();
         assertEquals(5, secondQty);
         // 余票已写缓存
         String key = TicketCacheConstant.TRAIN_STATION_REMAINING_TICKET + trainId + "_" + DEPARTURE + "_" + ARRIVAL;
         assertEquals("5", stringRedisTemplate.opsForHash().get(key, "2"));
+    }
+
+    @Test
+    void testQueryByRegionExpandsToStations() {
+        Long trainId = seedTrainBase(5);
+        String departureRegion = "test-departure-region-" + SUFFIX;
+        String arrivalRegion = "test-arrival-region-" + SUFFIX;
+        seedStation(DEPARTURE, departureRegion);
+        seedStation(ARRIVAL, arrivalRegion);
+
+        TicketPageQueryReqDTO req = new TicketPageQueryReqDTO();
+        req.setDeparture(departureRegion);
+        req.setArrival(arrivalRegion);
+        req.setCurrent(1L);
+        req.setSize(10L);
+        TicketPageQueryRespDTO resp = ticketService.pageListTicketQuery(req);
+
+        assertTrue(resp.getTrainList().stream().anyMatch(each ->
+                String.valueOf(trainId).equals(each.getTrainId())
+                        && DEPARTURE.equals(each.getDeparture())
+                        && ARRIVAL.equals(each.getArrival())));
     }
 
     @Test
@@ -216,6 +249,42 @@ class TicketServiceFlowTests {
                 .eq(SeatDO::getSeatNumber, "012A")
                 .eq(SeatDO::getSeatStatus, 1));
         assertEquals(1, lockedSpecifiedSeat);
+    }
+
+    @Test
+    void testLockSeatByIntervalDoesNotLockNonOverlappedSegments() {
+        Long trainId = seedTrainBase(0);
+        seedTrainStation(trainId, "1", DEPARTURE);
+        seedTrainStation(trainId, "2", "南京南");
+        seedTrainStation(trainId, "3", ARRIVAL);
+        seedTrainStation(trainId, "4", "杭州东");
+
+        seedSeatSegment(trainId, "99", "001A", DEPARTURE, "南京南");
+        seedSeatSegment(trainId, "99", "001A", "南京南", ARRIVAL);
+        seedSeatSegment(trainId, "99", "001A", ARRIVAL, "杭州东");
+
+        int locked = seatService.lockSeatByPosition(trainId, "99", "001A", DEPARTURE, ARRIVAL);
+
+        assertEquals(2, locked);
+        Long overlappedLocked = seatMapper.selectCount(com.baomidou.mybatisplus.core.toolkit.Wrappers.lambdaQuery(SeatDO.class)
+                .eq(SeatDO::getTrainId, trainId)
+                .eq(SeatDO::getCarriageNumber, "99")
+                .eq(SeatDO::getSeatNumber, "001A")
+                .in(SeatDO::getStartStation, DEPARTURE, "南京南")
+                .eq(SeatDO::getSeatStatus, 1));
+        Long nonOverlappedLocked = seatMapper.selectCount(com.baomidou.mybatisplus.core.toolkit.Wrappers.lambdaQuery(SeatDO.class)
+                .eq(SeatDO::getTrainId, trainId)
+                .eq(SeatDO::getCarriageNumber, "99")
+                .eq(SeatDO::getSeatNumber, "001A")
+                .eq(SeatDO::getStartStation, ARRIVAL)
+                .eq(SeatDO::getEndStation, "杭州东")
+                .eq(SeatDO::getSeatStatus, 1));
+        assertEquals(2L, overlappedLocked);
+        assertEquals(0L, nonOverlappedLocked);
+        assertEquals(0, seatService.countAvailable(trainId, 2, DEPARTURE, ARRIVAL));
+        assertTrue(seatService.selectAvailable(trainId, 2, DEPARTURE, ARRIVAL, 1).isEmpty());
+        assertEquals(1, seatService.countAvailable(trainId, 2, ARRIVAL, "杭州东"));
+        assertEquals("001A", seatService.selectAvailable(trainId, 2, ARRIVAL, "杭州东", 1).get(0).getSeatNumber());
     }
 
     @Test
@@ -366,6 +435,38 @@ class TicketServiceFlowTests {
         seedSeats(trainId, 1, 2);
         seedSeats(trainId, 2, secondCount);
         return trainId;
+    }
+
+    private void seedStation(String name, String regionName) {
+        StationDO station = new StationDO();
+        station.setCode("TEST" + Math.abs((name + regionName).hashCode()));
+        station.setName(name);
+        station.setSpell("test");
+        station.setRegion(regionName);
+        station.setRegionName(regionName);
+        stationMapper.insert(station);
+    }
+
+    private void seedTrainStation(Long trainId, String sequence, String stationName) {
+        TrainStationDO trainStation = new TrainStationDO();
+        trainStation.setTrainId(trainId);
+        trainStation.setSequence(sequence);
+        trainStation.setDeparture(stationName);
+        trainStationMapper.insert(trainStation);
+    }
+
+    private void seedSeatSegment(Long trainId, String carriageNumber, String seatNumber, String startStation, String endStation) {
+        SeatDO seat = new SeatDO();
+        seat.setId(SnowflakeIdUtil.nextId());
+        seat.setTrainId(trainId);
+        seat.setCarriageNumber(carriageNumber);
+        seat.setSeatNumber(seatNumber);
+        seat.setSeatType(2);
+        seat.setStartStation(startStation);
+        seat.setEndStation(endStation);
+        seat.setPrice(100);
+        seat.setSeatStatus(0);
+        seatMapper.insert(seat);
     }
 
     private PurchaseTicketReqDTO buildPurchaseReq(Long trainId, String passengerId) {

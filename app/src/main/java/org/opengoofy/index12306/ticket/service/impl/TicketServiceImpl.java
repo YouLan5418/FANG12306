@@ -28,10 +28,12 @@ import org.opengoofy.index12306.order.service.OrderService;
 import org.opengoofy.index12306.ticket.common.constant.TicketCacheConstant;
 import org.opengoofy.index12306.ticket.common.enums.TicketStatusEnum;
 import org.opengoofy.index12306.ticket.dao.entity.SeatDO;
+import org.opengoofy.index12306.ticket.dao.entity.StationDO;
 import org.opengoofy.index12306.ticket.dao.entity.TicketDO;
 import org.opengoofy.index12306.ticket.dao.entity.TrainDO;
 import org.opengoofy.index12306.ticket.dao.entity.TrainStationPriceDO;
 import org.opengoofy.index12306.ticket.dao.entity.TrainStationRelationDO;
+import org.opengoofy.index12306.ticket.dao.mapper.StationMapper;
 import org.opengoofy.index12306.ticket.dao.mapper.TicketMapper;
 import org.opengoofy.index12306.ticket.dao.mapper.TrainMapper;
 import org.opengoofy.index12306.ticket.dao.mapper.TrainStationPriceMapper;
@@ -80,6 +82,7 @@ public class TicketServiceImpl implements TicketService {
     private final TrainMapper trainMapper;
     private final TrainStationRelationMapper trainStationRelationMapper;
     private final TrainStationPriceMapper trainStationPriceMapper;
+    private final StationMapper stationMapper;
     private final TicketMapper ticketMapper;
     private final OrderMapper orderMapper;
     private final OrderItemMapper orderItemMapper;
@@ -101,10 +104,12 @@ public class TicketServiceImpl implements TicketService {
         if (requestParam.getDeparture() == null || requestParam.getArrival() == null) {
             throw new ClientException("出发站/到达站不能为空");
         }
+        List<String> departureStations = resolveStationNames(requestParam.getDeparture());
+        List<String> arrivalStations = resolveStationNames(requestParam.getArrival());
         List<TrainStationRelationDO> relations = trainStationRelationMapper.selectList(
                 Wrappers.lambdaQuery(TrainStationRelationDO.class)
-                        .eq(TrainStationRelationDO::getDeparture, requestParam.getDeparture())
-                        .eq(TrainStationRelationDO::getArrival, requestParam.getArrival()));
+                        .in(TrainStationRelationDO::getDeparture, departureStations)
+                        .in(TrainStationRelationDO::getArrival, arrivalStations));
         List<TicketListDTO> trainList = new ArrayList<>();
         for (TrainStationRelationDO relation : relations) {
             TrainDO train = trainMapper.selectById(relation.getTrainId());
@@ -174,9 +179,7 @@ public class TicketServiceImpl implements TicketService {
                 }
                 tokenDecremented = true;
 
-                List<TrainPurchaseTicketRespDTO> seats = trainSeatTypeSelector.select(requestParam, infoMap);
-                // 锁座
-                lockSeatsByAllocation(trainId, seats);
+                List<TrainPurchaseTicketRespDTO> seats = selectAndLockSeats(trainId, requestParam, infoMap);
                 // 存 t_ticket
                 for (TrainPurchaseTicketRespDTO seat : seats) {
                     TicketDO ticket = new TicketDO();
@@ -231,14 +234,16 @@ public class TicketServiceImpl implements TicketService {
     @Transactional(rollbackFor = Exception.class)
     @Override
     public void rollbackOnOrderClose(String orderSn) {
-        List<OrderItemDO> items = orderItemService.listByOrderSn(orderSn);
+        List<OrderItemDO> items = orderItemService.listSeatOperationItemsByOrderSn(orderSn);
         if (items.isEmpty()) {
             return;
         }
         Map<Integer, Integer> seatTypeCount = new HashMap<>();
         Long trainId = items.get(0).getTrainId();
+        org.opengoofy.index12306.order.dto.resp.TicketOrderDetailRespDTO detail = orderService.queryTicketOrderBasicByOrderSn(orderSn);
         for (OrderItemDO item : items) {
-            int released = seatService.releaseSeatByPosition(trainId, item.getCarriageNumber(), item.getSeatNumber());
+            int released = seatService.releaseSeatByPosition(trainId, item.getCarriageNumber(), item.getSeatNumber(),
+                    detail.getDeparture(), detail.getArrival());
             if (released > 0) {
                 seatTypeCount.merge(item.getSeatType(), 1, Integer::sum);
                 ticketMapper.update(null, Wrappers.lambdaUpdate(TicketDO.class)
@@ -249,7 +254,6 @@ public class TicketServiceImpl implements TicketService {
                         .set(TicketDO::getTicketStatus, TicketStatusEnum.UNPAID.getCode()));
             }
         }
-        org.opengoofy.index12306.order.dto.resp.TicketOrderDetailRespDTO detail = orderService.queryTicketOrderByOrderSn(orderSn);
         for (Map.Entry<Integer, Integer> e : seatTypeCount.entrySet()) {
             incrementRemaining(trainId, e.getKey(), detail.getDeparture(), detail.getArrival(), e.getValue());
         }
@@ -258,13 +262,15 @@ public class TicketServiceImpl implements TicketService {
 
     @Override
     public void markSeatsSold(String orderSn) {
-        List<OrderItemDO> items = orderItemService.listByOrderSn(orderSn);
+        List<OrderItemDO> items = orderItemService.listSeatOperationItemsByOrderSn(orderSn);
         if (items.isEmpty()) {
             return;
         }
         Long trainId = items.get(0).getTrainId();
+        var detail = orderService.queryTicketOrderBasicByOrderSn(orderSn);
         for (OrderItemDO item : items) {
-            seatService.sellSeatByPosition(trainId, item.getCarriageNumber(), item.getSeatNumber());
+            seatService.sellSeatByPosition(trainId, item.getCarriageNumber(), item.getSeatNumber(),
+                    detail.getDeparture(), detail.getArrival());
             // t_ticket -> 已支付（按 username+trainId+座位定位）
             ticketMapper.update(null, Wrappers.lambdaUpdate(TicketDO.class)
                     .eq(TicketDO::getTrainId, trainId)
@@ -277,12 +283,12 @@ public class TicketServiceImpl implements TicketService {
 
     @Override
     public void rollbackRefund(String orderSn, List<RefundDetailReqDTO> partialDetails) {
-        List<OrderItemDO> items = orderItemService.listByOrderSn(orderSn);
+        List<OrderItemDO> items = orderItemService.listSeatOperationItemsByOrderSn(orderSn);
         if (items.isEmpty()) {
             return;
         }
         Long trainId = items.get(0).getTrainId();
-        var detail = orderService.queryTicketOrderByOrderSn(orderSn);
+        var detail = orderService.queryTicketOrderBasicByOrderSn(orderSn);
         Map<Integer, Integer> seatTypeCount = new HashMap<>();
         List<OrderItemDO> toRollback;
         if (partialDetails == null || partialDetails.isEmpty()) {
@@ -293,7 +299,8 @@ public class TicketServiceImpl implements TicketService {
                             && Objects.equals(d.getSeatNumber(), it.getSeatNumber()))).toList();
         }
         for (OrderItemDO item : toRollback) {
-            int released = seatService.releaseSeatByPosition(trainId, item.getCarriageNumber(), item.getSeatNumber());
+            int released = seatService.releaseSeatByPosition(trainId, item.getCarriageNumber(), item.getSeatNumber(),
+                    detail.getDeparture(), detail.getArrival());
             if (released > 0) {
                 seatTypeCount.merge(item.getSeatType(), 1, Integer::sum);
                 ticketMapper.update(null, Wrappers.lambdaUpdate(TicketDO.class)
@@ -405,12 +412,42 @@ public class TicketServiceImpl implements TicketService {
         return localLockMap.get(TicketCacheConstant.LOCK_PURCHASE_TICKETS + trainId, k -> new java.util.concurrent.locks.ReentrantLock());
     }
 
-    private void lockSeatsByAllocation(Long trainId, List<TrainPurchaseTicketRespDTO> seats) {
+    private List<TrainPurchaseTicketRespDTO> selectAndLockSeats(Long trainId, PurchaseTicketReqDTO requestParam,
+                                                                Map<String, TrainSeatTypeSelector.PassengerActualInfo> infoMap) {
+        boolean chooseSeat = requestParam.getChooseSeats() != null && !requestParam.getChooseSeats().isEmpty();
+        int maxRetryTimes = chooseSeat ? 1 : 5;
+        ServiceException lastException = null;
+        for (int i = 0; i < maxRetryTimes; i++) {
+            List<TrainPurchaseTicketRespDTO> seats = trainSeatTypeSelector.select(requestParam, infoMap);
+            List<TrainPurchaseTicketRespDTO> lockedSeats = new ArrayList<>();
+            try {
+                lockSeatsByAllocation(trainId, requestParam.getDeparture(), requestParam.getArrival(), seats, lockedSeats);
+                return seats;
+            } catch (ServiceException ex) {
+                releaseLockedSeats(trainId, requestParam.getDeparture(), requestParam.getArrival(), lockedSeats);
+                lastException = ex;
+                if (chooseSeat) {
+                    throw ex;
+                }
+            }
+        }
+        throw lastException == null ? new ServiceException("座位竞争激烈，请稍后重试") : lastException;
+    }
+
+    private void lockSeatsByAllocation(Long trainId, String departure, String arrival, List<TrainPurchaseTicketRespDTO> seats,
+                                       List<TrainPurchaseTicketRespDTO> lockedSeats) {
         for (TrainPurchaseTicketRespDTO seat : seats) {
-            int updated = seatService.lockSeatByPosition(trainId, seat.getCarriageNumber(), seat.getSeatNumber());
+            int updated = seatService.lockSeatByPosition(trainId, seat.getCarriageNumber(), seat.getSeatNumber(), departure, arrival);
             if (updated < 1) {
                 throw new ServiceException("座位已被占用，选座失败: " + seat.getCarriageNumber() + seat.getSeatNumber());
             }
+            lockedSeats.add(seat);
+        }
+    }
+
+    private void releaseLockedSeats(Long trainId, String departure, String arrival, List<TrainPurchaseTicketRespDTO> lockedSeats) {
+        for (TrainPurchaseTicketRespDTO seat : lockedSeats) {
+            seatService.releaseSeatByPosition(trainId, seat.getCarriageNumber(), seat.getSeatNumber(), departure, arrival);
         }
     }
 
@@ -427,6 +464,22 @@ public class TicketServiceImpl implements TicketService {
             return count;
         }
         return Integer.parseInt(val.toString());
+    }
+
+    private List<String> resolveStationNames(String stationOrRegion) {
+        List<StationDO> stations = stationMapper.selectList(Wrappers.lambdaQuery(StationDO.class)
+                .eq(StationDO::getName, stationOrRegion)
+                .or().eq(StationDO::getCode, stationOrRegion)
+                .or().eq(StationDO::getRegion, stationOrRegion)
+                .or().eq(StationDO::getRegionName, stationOrRegion));
+        if (stations.isEmpty()) {
+            return List.of(stationOrRegion);
+        }
+        return stations.stream()
+                .map(StationDO::getName)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
     }
 
     private void decrementRemaining(Long trainId, Integer seatType, String departure, String arrival, int count) {

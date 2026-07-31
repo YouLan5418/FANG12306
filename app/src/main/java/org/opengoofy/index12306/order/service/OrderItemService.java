@@ -13,6 +13,8 @@ public interface OrderItemService {
 
     List<OrderItemDO> listByOrderSn(String orderSn);
 
+    List<OrderItemDO> listSeatOperationItemsByOrderSn(String orderSn);
+
     List<OrderItemDO> listByOrderSnAndIds(String orderSn, List<String> ids);
 
     int updateStatusByOrderSn(String orderSn, Integer status);

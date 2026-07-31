@@ -32,7 +32,6 @@ public class AdminUserController {
                 .eq(UserDO::getDeletionTime, 0L)
                 .select(UserDO::getId, UserDO::getUsername, UserDO::getRealName,
                         UserDO::getRegion, UserDO::getUserType, UserDO::getVerifyStatus,
-                        UserDO::getPhone, UserDO::getMail, UserDO::getIdCard,
                         UserDO::getCreateTime);
         if (keyword != null && !keyword.isBlank()) {
             wrapper.and(w -> w.like(UserDO::getUsername, keyword)

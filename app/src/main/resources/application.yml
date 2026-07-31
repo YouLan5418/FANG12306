@@ -108,7 +108,7 @@ ai:
 # 文件存储（RustFS / S3 兼容）
 file-storage:
   endpoint: http://localhost:9000
-  access-key: index12306
-  secret-key: index12306
+  access-key: rustfsadmin
+  secret-key: rustfsadmin
   bucket: index12306-kb
   region: us-east-1

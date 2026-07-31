@@ -36,6 +36,10 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(value = {AbstractException.class})
     public Result abstractException(HttpServletRequest request, AbstractException ex) {
+        if ("RepeatConsumptionException".equals(ex.getClass().getSimpleName())) {
+            log.warn("[{}] {} [ex] {}", request.getMethod(), request.getRequestURL().toString(), ex.toString());
+            return Results.failure(ex);
+        }
         if (ex.getCause() != null) {
             log.error("[{}] {} [ex] {}", request.getMethod(), request.getRequestURL().toString(), ex.toString(), ex.getCause());
             return Results.failure(ex);

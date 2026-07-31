@@ -24,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -88,6 +89,34 @@ class UserMapperTests {
                 "SELECT tableoid::regclass::text FROM t_user WHERE id = ? AND username = ?",
                 String.class, id, USERNAME);
         assertTrue(partition.startsWith("t_user_p"), "t_user 应落在子分区，实际: " + partition);
+    }
+
+    @Test
+    void testCorruptedEncryptedFieldDoesNotBreakQuery() {
+        UserDO user = new UserDO();
+        long id = SnowflakeIdUtil.nextId();
+        user.setId(id);
+        user.setUsername(USERNAME + "_corrupt");
+        user.setPassword("hashed-password");
+        user.setRealName("Corrupt Field User");
+        user.setRegion("0");
+        user.setIdType(0);
+        user.setIdCard(ID_CARD);
+        user.setPhone(PHONE);
+        user.setMail(MAIL);
+        user.setDeletionTime(0L);
+        assertEquals(1, userMapper.insert(user));
+
+        jdbcTemplate.update("UPDATE t_user SET id_card = ? WHERE id = ? AND username = ?",
+                "broken-ciphertext", id, user.getUsername());
+
+        UserDO actual = userMapper.selectOne(new LambdaQueryWrapper<UserDO>()
+                .eq(UserDO::getId, id)
+                .eq(UserDO::getUsername, user.getUsername()));
+        assertNotNull(actual);
+        assertNull(actual.getIdCard());
+        assertEquals(PHONE, actual.getPhone());
+        assertEquals(MAIL, actual.getMail());
     }
 
     @Test

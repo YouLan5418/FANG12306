@@ -48,7 +48,13 @@ public class IdempotentAspect {
             log.warn("幂等拦截: {}", uniqueKey);
             throw new RepeatConsumptionException(idempotent.message(), scene);
         }
-        return joinPoint.proceed();
+        try {
+            return joinPoint.proceed();
+        } finally {
+            if (scene == IdempotentSceneEnum.RESTAPI) {
+                stringRedisTemplate.delete(uniqueKey);
+            }
+        }
     }
 
     private String buildUniqueKey(ProceedingJoinPoint joinPoint, Idempotent idempotent) {

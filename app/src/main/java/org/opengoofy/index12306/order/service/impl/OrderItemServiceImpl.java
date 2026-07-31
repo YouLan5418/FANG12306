@@ -30,6 +30,22 @@ public class OrderItemServiceImpl implements OrderItemService {
     }
 
     @Override
+    public List<OrderItemDO> listSeatOperationItemsByOrderSn(String orderSn) {
+        return orderItemMapper.selectList(Wrappers.lambdaQuery(OrderItemDO.class)
+                .eq(OrderItemDO::getOrderSn, orderSn)
+                .select(OrderItemDO::getId,
+                        OrderItemDO::getOrderSn,
+                        OrderItemDO::getUserId,
+                        OrderItemDO::getUsername,
+                        OrderItemDO::getTrainId,
+                        OrderItemDO::getCarriageNumber,
+                        OrderItemDO::getSeatType,
+                        OrderItemDO::getSeatNumber,
+                        OrderItemDO::getStatus,
+                        OrderItemDO::getAmount));
+    }
+
+    @Override
     public List<OrderItemDO> listByOrderSnAndIds(String orderSn, List<String> ids) {
         return orderItemMapper.selectList(Wrappers.lambdaQuery(OrderItemDO.class)
                 .eq(OrderItemDO::getOrderSn, orderSn)
