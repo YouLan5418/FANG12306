@@ -11,6 +11,17 @@ export interface AdminDashboard {
   [key: string]: unknown
 }
 
+export interface AdminTrend {
+  labels: string[]
+  values: number[]
+}
+
+export interface AdminOrderStats {
+  total?: number
+  todayOrderCount?: number
+  byStatus?: Record<string, number>
+}
+
 export interface AdminUser {
   id: number
   username: string
@@ -54,6 +65,76 @@ export interface AdminTrain {
   saleStatus?: number
   departureTime?: string
   arrivalTime?: string
+}
+
+export interface TrainStationDetail {
+  id?: number
+  trainId?: number
+  stationId?: number
+  sequence?: string
+  departure?: string
+  arrival?: string
+  startRegion?: string
+  endRegion?: string
+  arrivalTime?: string
+  departureTime?: string
+  stopoverTime?: number
+}
+
+export interface TrainRelationDetail {
+  departure?: string
+  arrival?: string
+  startRegion?: string
+  endRegion?: string
+  departureTime?: string
+  arrivalTime?: string
+}
+
+export interface TrainPriceDetail {
+  departure?: string
+  arrival?: string
+  seatType: number
+  price: number
+}
+
+export interface AdminTrainDetail {
+  train: AdminTrain
+  stations: TrainStationDetail[]
+  relations: TrainRelationDetail[]
+  prices: TrainPriceDetail[]
+}
+
+export interface TrainPublishStation {
+  stationId?: number
+  stationName: string
+  region?: string
+  arrivalTime: string
+  departureTime: string
+  stopoverTime: number
+}
+
+export interface TrainPublishSeatPrice {
+  seatType: number
+  price: number
+}
+
+export interface TrainPublishCarriage {
+  carriageNumber: string
+  carriageType: number
+  seatType: number
+  seatCount: number
+}
+
+export interface TrainPublishReq {
+  trainNumber: string
+  trainType: number
+  trainTag?: string
+  trainBrand?: string
+  saleTime: string
+  saleStatus: number
+  stations: TrainPublishStation[]
+  seatPrices: TrainPublishSeatPrice[]
+  carriages: TrainPublishCarriage[]
 }
 
 export interface OperationTask {
