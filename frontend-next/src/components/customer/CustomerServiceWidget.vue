@@ -1,19 +1,24 @@
 <script setup lang="ts">
-import { ref } from "vue"
+import { nextTick, ref } from "vue"
 import { useRouter } from "vue-router"
 import { ChatDotRound, Close, Promotion } from "@element-plus/icons-vue"
 import { ElMessage } from "element-plus"
+import { streamCustomerChat } from "@/api/customer"
 import { useAuthStore } from "@/stores/auth"
+import type { CustomerSseEvent } from "@/types/customer"
 
 interface ChatMessage {
-  role: "assistant" | "user"
+  role: "assistant" | "user" | "system"
   content: string
 }
 
 const router = useRouter()
 const authStore = useAuthStore()
 const open = ref(false)
+const sending = ref(false)
 const input = ref("")
+const sessionId = ref("")
+const chatBodyRef = ref<HTMLElement>()
 const messages = ref<ChatMessage[]>([
   {
     role: "assistant",
@@ -31,18 +36,67 @@ function toggle() {
   open.value = !open.value
 }
 
-function send() {
+async function send() {
   const content = input.value.trim()
-  if (!content) {
+  if (!content || sending.value) {
     return
   }
 
   messages.value.push({ role: "user", content })
+  const assistantIndex = messages.value.push({ role: "assistant", content: "" }) - 1
   input.value = ""
-  messages.value.push({
-    role: "assistant",
-    content: "客服接口将在阶段 3 接入 SSE 流式回复；当前浮窗已完成唤起、登录校验和对话骨架。"
-  })
+  sending.value = true
+  await scrollToBottom()
+
+  try {
+    await streamCustomerChat(
+      {
+        sessionId: sessionId.value || undefined,
+        message: content
+      },
+      {
+        onEvent: (event) => handleSseEvent(event, assistantIndex),
+        onError: (error) => {
+          messages.value[assistantIndex].content ||= "客服暂时不可用，请稍后再试。"
+          ElMessage.error(error.message)
+        },
+        onComplete: () => {
+          sending.value = false
+        }
+      }
+    )
+  } catch (error) {
+    sending.value = false
+    messages.value[assistantIndex].content = "客服暂时不可用，请稍后再试。"
+    ElMessage.error(error instanceof Error ? error.message : "客服请求失败")
+  } finally {
+    sending.value = false
+    await scrollToBottom()
+  }
+}
+
+function handleSseEvent(event: CustomerSseEvent, assistantIndex: number) {
+  if (event.type === "token") {
+    messages.value[assistantIndex].content += event.content || ""
+  } else if (event.type === "tool_call") {
+    messages.value.push({
+      role: "system",
+      content: `已调用业务工具：${event.name || "unknown"}`
+    })
+  } else if (event.type === "done") {
+    sessionId.value = event.sessionId || sessionId.value
+  } else if (event.type === "error") {
+    messages.value[assistantIndex].content ||= event.message || "客服处理失败"
+    ElMessage.error(event.message || "客服处理失败")
+  }
+  scrollToBottom()
+}
+
+async function scrollToBottom() {
+  await nextTick()
+  if (chatBodyRef.value) {
+    chatBodyRef.value.scrollTop = chatBodyRef.value.scrollHeight
+  }
 }
 </script>
 
@@ -58,20 +112,26 @@ function send() {
           <el-button :icon="Close" circle text @click="open = false" />
         </header>
 
-        <main class="chat-body">
+        <main ref="chatBodyRef" class="chat-body">
           <div
             v-for="(message, index) in messages"
             :key="index"
             class="message"
             :class="message.role"
           >
-            {{ message.content }}
+            <span v-if="message.content">{{ message.content }}</span>
+            <span v-else class="typing">正在思考...</span>
           </div>
         </main>
 
         <footer class="chat-input">
-          <el-input v-model="input" placeholder="输入你的问题" @keyup.enter="send" />
-          <el-button :icon="Promotion" type="primary" @click="send" />
+          <el-input
+            v-model="input"
+            :disabled="sending"
+            placeholder="输入你的问题"
+            @keyup.enter="send"
+          />
+          <el-button :icon="Promotion" :loading="sending" type="primary" @click="send" />
         </footer>
       </section>
     </transition>
@@ -159,6 +219,7 @@ function send() {
   border-radius: 8px;
   line-height: 1.6;
   font-size: 14px;
+  white-space: pre-wrap;
 }
 
 .message.assistant {
@@ -172,6 +233,18 @@ function send() {
   align-self: flex-end;
   color: #fff;
   background: #2563eb;
+}
+
+.message.system {
+  align-self: center;
+  max-width: 92%;
+  color: #64748b;
+  background: #eef2f7;
+  font-size: 12px;
+}
+
+.typing {
+  color: #64748b;
 }
 
 .chat-input {
