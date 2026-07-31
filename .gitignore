@@ -21,8 +21,16 @@ nul
 ### Logs ###
 *.log
 logs/
+log/
 
 ### Frontend ###
 node_modules/
 dist/
 .env.local
+
+### Local / migrated workspace artifacts ###
+.codegraph/
+12306/
+frontend/
+resources/
+ADMIN_PANEL_PLAN.md
