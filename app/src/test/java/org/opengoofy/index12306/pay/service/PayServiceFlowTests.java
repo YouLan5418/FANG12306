@@ -173,8 +173,8 @@ class PayServiceFlowTests {
         RefundReqDTO refundReq = new RefundReqDTO();
         refundReq.setOrderSn(orderSn);
         refundReq.setRefundType(RefundTypeEnum.FULL_REFUND.getCode());
-        refundReq.setRefundAmount(totalAmount);
         RefundRespDTO refundResp = refundService.commonRefund(refundReq);
+        assertEquals(totalAmount, refundResp.getRefundAmount());
         assertEquals(TradeStatusEnum.TRADE_CLOSED.getTradeCode(), refundResp.getStatus());
 
         payDO = payMapper.selectOne(Wrappers.lambdaQuery(PayDO.class).eq(PayDO::getOrderSn, orderSn));
@@ -209,7 +209,8 @@ class PayServiceFlowTests {
 
     private Long seedTrainBase(int secondCount) {
         TrainDO train = new TrainDO();
-        train.setTrainNumber("G" + SUFFIX);
+        train.setId(SnowflakeIdUtil.nextId());
+        train.setTrainNumber("G" + train.getId());
         train.setTrainType(0);
         train.setStartStation(DEPARTURE);
         train.setEndStation(ARRIVAL);
@@ -219,6 +220,7 @@ class PayServiceFlowTests {
         train.setArrivalTime(new Date());
         trainMapper.insert(train);
         Long trainId = train.getId();
+        stringRedisTemplate.delete(TicketCacheConstant.TRAIN_STATION_REMAINING_TICKET + trainId + "_" + DEPARTURE + "_" + ARRIVAL);
 
         TrainStationRelationDO relation = new TrainStationRelationDO();
         relation.setTrainId(trainId);
@@ -264,13 +266,14 @@ class PayServiceFlowTests {
 
     private String registerUserAndPassenger(String tag) {
         String username = "p6" + tag + "_" + SUFFIX;
+        String userIdentity = String.format("%04d", Math.abs((tag + SUFFIX).hashCode() % 10000));
         UserRegisterReqDTO reg = new UserRegisterReqDTO();
         reg.setUsername(username);
         reg.setPassword("pwd");
         reg.setRealName("P6Test");
         reg.setIdType(0);
-        reg.setIdCard("110101199001011234");
-        reg.setPhone("137" + SUFFIX.substring(SUFFIX.length() - 8));
+        reg.setIdCard("11010119900101" + userIdentity);
+        reg.setPhone("137" + String.format("%08d", Math.abs((tag + SUFFIX).hashCode() % 100000000)));
         reg.setMail("p6" + tag + "_" + SUFFIX + "@example.com");
         userLoginService.register(reg);
 
@@ -278,9 +281,9 @@ class PayServiceFlowTests {
         PassengerReqDTO p = new PassengerReqDTO();
         p.setRealName("PassengerA");
         p.setIdType(0);
-        p.setIdCard("110101199001011234");
+        p.setIdCard("11010119900201" + userIdentity);
         p.setDiscountType(0);
-        p.setPhone("13800001111");
+        p.setPhone("138" + String.format("%08d", Math.abs((tag + SUFFIX).hashCode() % 100000000)));
         passengerService.savePassenger(p);
         List<PassengerRespDTO> passengers = passengerService.listPassenger(username);
         return passengers.get(0).getId();

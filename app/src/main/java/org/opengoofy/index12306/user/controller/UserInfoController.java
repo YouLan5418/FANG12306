@@ -1,6 +1,7 @@
 package org.opengoofy.index12306.user.controller;
 
 import lombok.RequiredArgsConstructor;
+import org.opengoofy.index12306.common.core.UserContext;
 import org.opengoofy.index12306.framework.convention.result.Result;
 import org.opengoofy.index12306.framework.convention.result.Results;
 import org.opengoofy.index12306.user.dto.req.UserUpdateReqDTO;
@@ -23,17 +24,18 @@ public class UserInfoController {
     private final UserService userService;
 
     @GetMapping("/api/user-service/query")
-    public Result<UserQueryRespDTO> queryUserByUsername(@RequestParam("username") String username) {
-        return Results.success(userService.queryUserByUsername(username));
+    public Result<UserQueryRespDTO> queryUserByUsername(@RequestParam(value = "username", required = false) String username) {
+        return Results.success(userService.queryUserByUsername(UserContext.getUsername()));
     }
 
     @GetMapping("/api/user-service/actual/query")
-    public Result<UserQueryActualRespDTO> queryActualUserByUsername(@RequestParam("username") String username) {
-        return Results.success(userService.queryActualUserByUsername(username));
+    public Result<UserQueryActualRespDTO> queryActualUserByUsername(@RequestParam(value = "username", required = false) String username) {
+        return Results.success(userService.queryActualUserByUsername(UserContext.getUsername()));
     }
 
     @PostMapping("/api/user-service/update")
     public Result<Void> update(@RequestBody UserUpdateReqDTO requestParam) {
+        requestParam.setUsername(UserContext.getUsername());
         userService.update(requestParam);
         return Results.success();
     }

@@ -84,13 +84,14 @@ class TicketServiceFlowTests {
 
     private String registerUserAndPassenger(String tag) {
         String username = "p5" + tag + "_" + SUFFIX;
+        String userIdentity = String.format("%04d", Math.abs((tag + SUFFIX).hashCode() % 10000));
         UserRegisterReqDTO reg = new UserRegisterReqDTO();
         reg.setUsername(username);
         reg.setPassword("pwd");
         reg.setRealName("P5测试");
         reg.setIdType(0);
-        reg.setIdCard("110101199001011234");
-        reg.setPhone("139" + SUFFIX.substring(SUFFIX.length() - 8));
+        reg.setIdCard("11010119900101" + userIdentity);
+        reg.setPhone("139" + String.format("%08d", Math.abs((tag + SUFFIX).hashCode() % 100000000)));
         reg.setMail("p5" + tag + "_" + SUFFIX + "@example.com");
         userLoginService.register(reg);
 
@@ -98,9 +99,9 @@ class TicketServiceFlowTests {
         PassengerReqDTO p = new PassengerReqDTO();
         p.setRealName("乘车人甲");
         p.setIdType(0);
-        p.setIdCard("110101199001011234");
+        p.setIdCard("11010119900201" + userIdentity);
         p.setDiscountType(0);
-        p.setPhone("13800001111");
+        p.setPhone("138" + String.format("%08d", Math.abs((tag + SUFFIX).hashCode() % 100000000)));
         passengerService.savePassenger(p);
         List<PassengerRespDTO> passengers = passengerService.listPassenger(username);
         return passengers.get(0).getId();
@@ -187,6 +188,66 @@ class TicketServiceFlowTests {
         req.setPassengers(List.of(p1, p2));
 
         assertThrows(AbstractException.class, () -> ticketService.purchaseTickets(req));
+
+        String key = TicketCacheConstant.TRAIN_STATION_REMAINING_TICKET + trainId + "_" + DEPARTURE + "_" + ARRIVAL;
+        assertEquals("1", stringRedisTemplate.opsForHash().get(key, "2"));
+    }
+
+    @Test
+    void testPurchaseWithChooseSeatsLocksSpecifiedSeat() {
+        Long trainId = seedTrainBase(3);
+        String passengerId = registerUserAndPassenger("choose");
+
+        PurchaseTicketReqDTO req = new PurchaseTicketReqDTO();
+        req.setTrainId(String.valueOf(trainId));
+        req.setDeparture(DEPARTURE);
+        req.setArrival(ARRIVAL);
+        req.setChooseSeats(List.of("012A"));
+        PurchaseTicketPassengerDetailDTO p = new PurchaseTicketPassengerDetailDTO();
+        p.setPassengerId(passengerId);
+        p.setSeatType(2);
+        req.setPassengers(List.of(p));
+
+        TicketPurchaseRespDTO resp = ticketService.purchaseTickets(req);
+        assertNotNull(resp.getOrderSn());
+
+        Long lockedSpecifiedSeat = seatMapper.selectCount(com.baomidou.mybatisplus.core.toolkit.Wrappers.lambdaQuery(SeatDO.class)
+                .eq(SeatDO::getTrainId, trainId)
+                .eq(SeatDO::getSeatNumber, "012A")
+                .eq(SeatDO::getSeatStatus, 1));
+        assertEquals(1, lockedSpecifiedSeat);
+    }
+
+    @Test
+    void testPurchaseWithOccupiedChooseSeatsRejectedAndRemainingRolledBack() {
+        Long trainId = seedTrainBase(3);
+        String firstPassengerId = registerUserAndPassenger("choose1");
+
+        PurchaseTicketReqDTO firstReq = new PurchaseTicketReqDTO();
+        firstReq.setTrainId(String.valueOf(trainId));
+        firstReq.setDeparture(DEPARTURE);
+        firstReq.setArrival(ARRIVAL);
+        firstReq.setChooseSeats(List.of("012A"));
+        PurchaseTicketPassengerDetailDTO firstPassenger = new PurchaseTicketPassengerDetailDTO();
+        firstPassenger.setPassengerId(firstPassengerId);
+        firstPassenger.setSeatType(2);
+        firstReq.setPassengers(List.of(firstPassenger));
+        ticketService.purchaseTickets(firstReq);
+
+        String secondPassengerId = registerUserAndPassenger("choose2");
+        PurchaseTicketReqDTO secondReq = new PurchaseTicketReqDTO();
+        secondReq.setTrainId(String.valueOf(trainId));
+        secondReq.setDeparture(DEPARTURE);
+        secondReq.setArrival(ARRIVAL);
+        secondReq.setChooseSeats(List.of("012A"));
+        PurchaseTicketPassengerDetailDTO secondPassenger = new PurchaseTicketPassengerDetailDTO();
+        secondPassenger.setPassengerId(secondPassengerId);
+        secondPassenger.setSeatType(2);
+        secondReq.setPassengers(List.of(secondPassenger));
+
+        assertThrows(AbstractException.class, () -> ticketService.purchaseTickets(secondReq));
+        String key = TicketCacheConstant.TRAIN_STATION_REMAINING_TICKET + trainId + "_" + DEPARTURE + "_" + ARRIVAL;
+        assertEquals("2", stringRedisTemplate.opsForHash().get(key, "2"));
     }
 
     @Test
@@ -227,7 +288,8 @@ class TicketServiceFlowTests {
     /** 建车次/区间/票价，并按 seatType 各放若干座位（二等座 secondCount 张） */
     private Long seedTrainBase(int secondCount) {
         TrainDO train = new TrainDO();
-        train.setTrainNumber("G" + SUFFIX);
+        train.setId(SnowflakeIdUtil.nextId());
+        train.setTrainNumber("G" + train.getId());
         train.setTrainType(0);
         train.setStartStation(DEPARTURE);
         train.setEndStation(ARRIVAL);
@@ -237,6 +299,7 @@ class TicketServiceFlowTests {
         train.setArrivalTime(new Date());
         trainMapper.insert(train);
         Long trainId = train.getId();
+        stringRedisTemplate.delete(TicketCacheConstant.TRAIN_STATION_REMAINING_TICKET + trainId + "_" + DEPARTURE + "_" + ARRIVAL);
 
         TrainStationRelationDO relation = new TrainStationRelationDO();
         relation.setTrainId(trainId);

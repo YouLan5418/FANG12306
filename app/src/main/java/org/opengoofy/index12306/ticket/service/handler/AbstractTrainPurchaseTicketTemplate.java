@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * 选座策略基类：按 seatType 选取可用座位并组装选座结果（含票价）。
@@ -28,8 +29,21 @@ public abstract class AbstractTrainPurchaseTicketTemplate implements IPurchaseTi
     @Override
     public List<TrainPurchaseTicketRespDTO> selectSeats(PurchaseTicketReqDTO requestParam, int count) {
         Long trainId = Long.parseLong(requestParam.getTrainId());
-        List<SeatDO> seats = seatService.selectAvailable(trainId, seatType(),
-                requestParam.getDeparture(), requestParam.getArrival(), count);
+        List<SeatDO> seats;
+        if (requestParam.getChooseSeats() != null && !requestParam.getChooseSeats().isEmpty()) {
+            List<String> seatNumbers = requestParam.getChooseSeats().stream()
+                    .map(this::extractSeatNumber)
+                    .filter(each -> each != null && !each.isBlank())
+                    .collect(Collectors.toList());
+            seats = seatService.selectAvailableBySeatNumbers(trainId, seatType(),
+                    requestParam.getDeparture(), requestParam.getArrival(), seatNumbers);
+            if (seats.size() > count) {
+                seats = seats.subList(0, count);
+            }
+        } else {
+            seats = seatService.selectAvailable(trainId, seatType(),
+                    requestParam.getDeparture(), requestParam.getArrival(), count);
+        }
         if (seats.size() < count) {
             throw new ServiceException("余票不足， seatType=" + seatType() + " 需求=" + count + " 可用=" + seats.size());
         }
@@ -54,5 +68,14 @@ public abstract class AbstractTrainPurchaseTicketTemplate implements IPurchaseTi
                 .eq(TrainStationPriceDO::getArrival, arrival)
                 .eq(TrainStationPriceDO::getSeatType, seatType));
         return price == null ? 0 : price.getPrice();
+    }
+
+    private String extractSeatNumber(String chooseSeat) {
+        if (chooseSeat == null) {
+            return null;
+        }
+        String trimmed = chooseSeat.trim();
+        int delimiter = Math.max(trimmed.lastIndexOf(':'), trimmed.lastIndexOf('-'));
+        return delimiter >= 0 ? trimmed.substring(delimiter + 1) : trimmed;
     }
 }

@@ -2,11 +2,11 @@ package org.opengoofy.index12306.user.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.StrUtil;
-import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import lombok.RequiredArgsConstructor;
 import org.opengoofy.index12306.framework.convention.exception.ClientException;
 import org.opengoofy.index12306.framework.distributedid.toolkit.SnowflakeIdUtil;
+import org.opengoofy.index12306.common.core.UserContext;
 import org.opengoofy.index12306.common.toolkit.AESCryptUtil;
 import org.opengoofy.index12306.user.dao.entity.UserDO;
 import org.opengoofy.index12306.user.dao.entity.UserDeletionDO;
@@ -72,6 +72,11 @@ public class UserServiceImpl implements UserService {
     @Transactional(rollbackFor = Exception.class)
     @Override
     public void update(UserUpdateReqDTO requestParam) {
+        String currentUsername = UserContext.getUsername();
+        if (StrUtil.isBlank(currentUsername)) {
+            throw new ClientException("用户未登录");
+        }
+        requestParam.setUsername(currentUsername);
         UserQueryActualRespDTO actual = queryActualUserByUsername(requestParam.getUsername());
         UserDO userDO = BeanUtil.copyProperties(requestParam, UserDO.class);
         userDO.setId(null);

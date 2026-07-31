@@ -8,7 +8,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.opengoofy.index12306.framework.convention.exception.ServiceException;
 import org.opengoofy.index12306.framework.idempotent.annotation.Idempotent;
 import org.opengoofy.index12306.framework.idempotent.enums.IdempotentTypeEnum;
-import org.opengoofy.index12306.order.common.constant.OrderRocketMQConstant;
 import org.opengoofy.index12306.order.mq.event.PayResultCallbackOrderEvent;
 import org.opengoofy.index12306.pay.common.constant.PayCacheConstant;
 import org.opengoofy.index12306.pay.common.enums.TradeStatusEnum;
@@ -57,7 +56,7 @@ public class PayServiceImpl implements PayService {
             return JSON.parseObject(cached, PayRespDTO.class);
         }
         String paySn = PayIdGeneratorManager.generatePaySn(requestParam.getOrderSn());
-        String channel = requestParam.getChannel() == null ? "ALI_PAY" : requestParam.getChannel();
+        String channel = normalizeChannel(requestParam.getChannel());
         PaymentChannel.PayCreateResult payResult = paymentChannel.createPay(
                 paySn, requestParam.getOrderSn(), requestParam.getTotalAmount(), channel);
 
@@ -91,6 +90,13 @@ public class PayServiceImpl implements PayService {
         if (payDO == null) {
             throw new ServiceException("支付单不存在");
         }
+        if (Objects.equals(payDO.getStatus(), TradeStatusEnum.TRADE_SUCCESS.getTradeCode())) {
+            log.info("支付回调重复通知，orderSn={} 已处理", requestParam.getOrderSn());
+            return;
+        }
+        if (!Objects.equals(requestParam.getStatus(), TradeStatusEnum.TRADE_SUCCESS.getTradeCode())) {
+            throw new ServiceException("不支持的支付回调状态: " + requestParam.getStatus());
+        }
         int updated = payMapper.update(null, Wrappers.lambdaUpdate(PayDO.class)
                 .eq(PayDO::getOrderSn, requestParam.getOrderSn())
                 .set(PayDO::getTradeNo, requestParam.getTradeNo())
@@ -100,17 +106,15 @@ public class PayServiceImpl implements PayService {
         if (updated <= 0) {
             throw new ServiceException("修改支付单支付结果失败");
         }
-        if (Objects.equals(requestParam.getStatus(), TradeStatusEnum.TRADE_SUCCESS.getTradeCode())) {
-            PayResultCallbackOrderEvent event = PayResultCallbackOrderEvent.builder()
-                    .orderSn(payDO.getOrderSn())
-                    .paySn(payDO.getPaySn())
-                    .channel(payDO.getChannel())
-                    .gmtPayment(requestParam.getGmtPayment())
-                    .payAmount(requestParam.getPayAmount())
-                    .status(requestParam.getStatus())
-                    .build();
-            payResultCallbackOrderSendProduce.sendMessage(event);
-        }
+        PayResultCallbackOrderEvent event = PayResultCallbackOrderEvent.builder()
+                .orderSn(payDO.getOrderSn())
+                .paySn(payDO.getPaySn())
+                .channel(payDO.getChannel())
+                .gmtPayment(requestParam.getGmtPayment())
+                .payAmount(requestParam.getPayAmount())
+                .status(requestParam.getStatus())
+                .build();
+        payResultCallbackOrderSendProduce.sendMessage(event);
     }
 
     @Override
@@ -123,5 +127,16 @@ public class PayServiceImpl implements PayService {
     public PayInfoRespDTO getPayInfoByPaySn(String paySn) {
         PayDO payDO = payMapper.selectOne(Wrappers.lambdaQuery(PayDO.class).eq(PayDO::getPaySn, paySn));
         return BeanUtil.copyProperties(payDO, PayInfoRespDTO.class);
+    }
+
+    private String normalizeChannel(String channel) {
+        if (channel == null || channel.isBlank()) {
+            return "ALI_PAY";
+        }
+        String normalized = channel.trim().toUpperCase();
+        if (!Objects.equals(normalized, "ALI_PAY") && !Objects.equals(normalized, "WECHAT_PAY")) {
+            throw new ServiceException("不支持的支付渠道: " + channel);
+        }
+        return normalized;
     }
 }

@@ -25,8 +25,8 @@ public class WebMvcConfig implements WebMvcConfigurer {
                         "/api/ticket-service/ticket/query",
                         "/api/ticket-service/region-station/query",
                         "/api/ticket-service/station/all",
+                        "/api/ticket-service/train-station/query",
                         "/api/pay-service/callback/**",
-                        "/api/customer-service/chat",
                         "/actuator/**"
                 );
     }

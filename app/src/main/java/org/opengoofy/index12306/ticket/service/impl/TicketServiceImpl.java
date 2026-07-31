@@ -147,6 +147,7 @@ public class TicketServiceImpl implements TicketService {
 
         // 分布式公平锁 + 本地锁
         RLock distributedLock = redissonClient.getFairLock(TicketCacheConstant.LOCK_PURCHASE_TICKETS + trainId);
+        boolean tokenDecremented = false;
         try {
             distributedLock.lock();
             localLock(trainId).lock();
@@ -162,6 +163,7 @@ public class TicketServiceImpl implements TicketService {
                 for (Map.Entry<Integer, Long> e : seatTypeCount.entrySet()) {
                     decrementRemaining(trainId, e.getKey(), requestParam.getDeparture(), requestParam.getArrival(), e.getValue().intValue());
                 }
+                tokenDecremented = true;
 
                 List<TrainPurchaseTicketRespDTO> seats = trainSeatTypeSelector.select(requestParam, infoMap);
                 // 锁座
@@ -193,7 +195,9 @@ public class TicketServiceImpl implements TicketService {
             }
         } catch (Throwable ex) {
             // 令牌已扣减需手动回滚（DB 由事务回滚）
-            rollbackToken(trainId, requestParam.getDeparture(), requestParam.getArrival(), seatTypeCount);
+            if (tokenDecremented) {
+                rollbackToken(trainId, requestParam.getDeparture(), requestParam.getArrival(), seatTypeCount);
+            }
             throw ex;
         } finally {
             try { distributedLock.unlock(); } catch (Throwable ignored) {}
@@ -278,13 +282,15 @@ public class TicketServiceImpl implements TicketService {
                             && Objects.equals(d.getSeatNumber(), it.getSeatNumber()))).toList();
         }
         for (OrderItemDO item : toRollback) {
-            seatService.releaseSeatByPosition(trainId, item.getCarriageNumber(), item.getSeatNumber());
-            seatTypeCount.merge(item.getSeatType(), 1, Integer::sum);
-            ticketMapper.update(null, Wrappers.lambdaUpdate(TicketDO.class)
-                    .eq(TicketDO::getTrainId, trainId)
-                    .eq(TicketDO::getCarriageNumber, item.getCarriageNumber())
-                    .eq(TicketDO::getSeatNumber, item.getSeatNumber())
-                    .set(TicketDO::getTicketStatus, TicketStatusEnum.UNPAID.getCode()));
+            int released = seatService.releaseSeatByPosition(trainId, item.getCarriageNumber(), item.getSeatNumber());
+            if (released > 0) {
+                seatTypeCount.merge(item.getSeatType(), 1, Integer::sum);
+                ticketMapper.update(null, Wrappers.lambdaUpdate(TicketDO.class)
+                        .eq(TicketDO::getTrainId, trainId)
+                        .eq(TicketDO::getCarriageNumber, item.getCarriageNumber())
+                        .eq(TicketDO::getSeatNumber, item.getSeatNumber())
+                        .set(TicketDO::getTicketStatus, TicketStatusEnum.UNPAID.getCode()));
+            }
         }
         for (Map.Entry<Integer, Integer> e : seatTypeCount.entrySet()) {
             incrementRemaining(trainId, e.getKey(), detail.getDeparture(), detail.getArrival(), e.getValue());

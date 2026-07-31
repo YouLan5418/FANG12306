@@ -43,6 +43,23 @@ public class SeatServiceImpl implements SeatService {
     }
 
     @Override
+    public List<SeatDO> selectAvailableBySeatNumbers(Long trainId, Integer seatType, String departure, String arrival,
+                                                     List<String> seatNumbers) {
+        if (seatNumbers == null || seatNumbers.isEmpty()) {
+            return List.of();
+        }
+        return seatMapper.selectList(Wrappers.lambdaQuery(SeatDO.class)
+                .eq(SeatDO::getTrainId, trainId)
+                .eq(SeatDO::getSeatType, seatType)
+                .eq(SeatDO::getStartStation, departure)
+                .eq(SeatDO::getEndStation, arrival)
+                .eq(SeatDO::getSeatStatus, 0)
+                .in(SeatDO::getSeatNumber, seatNumbers)
+                .orderByAsc(SeatDO::getCarriageNumber)
+                .orderByAsc(SeatDO::getSeatNumber));
+    }
+
+    @Override
     public int lockSeatByPosition(Long trainId, String carriageNumber, String seatNumber) {
         return seatMapper.update(null, Wrappers.lambdaUpdate(SeatDO.class)
                 .eq(SeatDO::getTrainId, trainId)

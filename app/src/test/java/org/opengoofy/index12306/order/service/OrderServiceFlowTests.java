@@ -145,7 +145,14 @@ class OrderServiceFlowTests {
                 .eq(OrderDO::getOrderSn, orderSn));
         assertEquals(OrderStatusEnum.ALREADY_PAID.getStatus(), paid.getStatus());
 
-        // 已支付状态再次流转：被拒
+        // 支付成功消息重复投递：幂等忽略
+        orderService.statusReversal(OrderStatusReversalDTO.builder()
+                .orderSn(orderSn)
+                .orderStatus(OrderStatusEnum.ALREADY_PAID.getStatus())
+                .orderItemStatus(OrderItemStatusEnum.ALREADY_PAID.getStatus())
+                .build());
+
+        // 已支付状态流转到其它状态：被拒
         assertThrows(AbstractException.class, () -> orderService.statusReversal(OrderStatusReversalDTO.builder()
                 .orderSn(orderSn)
                 .orderStatus(OrderStatusEnum.COMPLETED.getStatus())
@@ -165,7 +172,7 @@ class OrderServiceFlowTests {
         orderService.payCallbackOrder(PayResultCallbackOrderEvent.builder()
                 .orderSn(orderSn)
                 .paySn("PAY" + System.currentTimeMillis())
-                .channel("alipay")
+                .channel("WECHAT_PAY")
                 .gmtPayment(payTime)
                 .payAmount(110600)
                 .status("TRADE_SUCCESS")
@@ -173,7 +180,7 @@ class OrderServiceFlowTests {
         OrderDO order = orderMapper.selectOne(com.baomidou.mybatisplus.core.toolkit.Wrappers.lambdaQuery(OrderDO.class)
                 .eq(OrderDO::getOrderSn, orderSn));
         assertNotNull(order.getPayTime());
-        assertEquals(0, order.getPayType());
+        assertEquals(1, order.getPayType());
     }
 
     @Test
@@ -194,5 +201,11 @@ class OrderServiceFlowTests {
 
         // 已关闭订单再次关单返回 false
         assertFalse(orderService.closeTickOrder(closeReq));
+
+        assertThrows(AbstractException.class, () -> orderService.statusReversal(OrderStatusReversalDTO.builder()
+                .orderSn(orderSn)
+                .orderStatus(OrderStatusEnum.ALREADY_PAID.getStatus())
+                .orderItemStatus(OrderItemStatusEnum.ALREADY_PAID.getStatus())
+                .build()));
     }
 }

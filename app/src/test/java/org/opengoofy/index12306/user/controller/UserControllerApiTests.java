@@ -5,6 +5,7 @@ import com.alibaba.fastjson2.JSONObject;
 import org.junit.jupiter.api.Test;
 import org.opengoofy.index12306.user.dto.req.UserLoginReqDTO;
 import org.opengoofy.index12306.user.dto.req.UserRegisterReqDTO;
+import org.opengoofy.index12306.user.dto.req.UserUpdateReqDTO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -85,5 +86,73 @@ class UserControllerApiTests {
         mockMvc.perform(get("/api/user-service/logout").param("accessToken", accessToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"));
+    }
+
+    @Test
+    void testUserInfoUsesCurrentLoginUserAndRejectsUsernameSpoofing() throws Exception {
+        String userA = "p3safe_a_" + SUFFIX;
+        String userB = "p3safe_b_" + SUFFIX;
+        register(userA, "139" + SUFFIX.substring(SUFFIX.length() - 8), "a");
+        register(userB, "138" + SUFFIX.substring(SUFFIX.length() - 8), "b");
+        String tokenA = login(userA);
+
+        mockMvc.perform(get("/api/user-service/query")
+                        .header("Authorization", tokenA)
+                        .param("username", userB))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.username").value(userA));
+
+        mockMvc.perform(get("/api/user-service/actual/query")
+                        .header("Authorization", tokenA)
+                        .param("username", userB))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.username").value(userA));
+
+        UserUpdateReqDTO updateReq = new UserUpdateReqDTO();
+        updateReq.setUsername(userB);
+        updateReq.setRealName("被越权修改");
+        mockMvc.perform(post("/api/user-service/update")
+                        .header("Authorization", tokenA)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(JSON.toJSONString(updateReq)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"));
+
+        mockMvc.perform(get("/api/user-service/query")
+                        .header("Authorization", tokenA)
+                        .param("username", userA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.realName").value("被越权修改"));
+    }
+
+    private void register(String username, String phone, String tag) throws Exception {
+        UserRegisterReqDTO registerReq = new UserRegisterReqDTO();
+        registerReq.setUsername(username);
+        registerReq.setPassword("pwd-" + SUFFIX);
+        registerReq.setRealName("API安全测试" + tag);
+        registerReq.setIdType(0);
+        registerReq.setIdCard("11010119900101123" + tag);
+        registerReq.setPhone(phone);
+        registerReq.setMail("p3safe_" + tag + "_" + SUFFIX + "@example.com");
+        mockMvc.perform(post("/api/user-service/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(JSON.toJSONString(registerReq)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"));
+    }
+
+    private String login(String username) throws Exception {
+        UserLoginReqDTO loginReq = new UserLoginReqDTO();
+        loginReq.setUsernameOrMailOrPhone(username);
+        loginReq.setPassword("pwd-" + SUFFIX);
+        MvcResult loginResult = mockMvc.perform(post("/api/user-service/v1/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(JSON.toJSONString(loginReq)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andReturn();
+        return JSON.parseObject(loginResult.getResponse().getContentAsString())
+                .getJSONObject("data")
+                .getString("accessToken");
     }
 }

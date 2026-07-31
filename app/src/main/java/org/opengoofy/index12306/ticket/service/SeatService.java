@@ -13,6 +13,9 @@ public interface SeatService {
 
     List<SeatDO> selectAvailable(Long trainId, Integer seatType, String departure, String arrival, int count);
 
+    List<SeatDO> selectAvailableBySeatNumbers(Long trainId, Integer seatType, String departure, String arrival,
+                                              List<String> seatNumbers);
+
     /** 按 (trainId, 车厢号, 座位号) 锁座：状态 0->1，返回受影响行数 */
     int lockSeatByPosition(Long trainId, String carriageNumber, String seatNumber);
 

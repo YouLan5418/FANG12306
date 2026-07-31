@@ -218,6 +218,10 @@ public class OrderServiceImpl implements OrderService {
         if (orderDO == null) {
             throw new ServiceException(OrderCanalErrorCodeEnum.ORDER_CANAL_UNKNOWN_ERROR);
         }
+        if (Objects.equals(orderDO.getStatus(), requestParam.getOrderStatus())) {
+            log.info("订单状态流转重复消息忽略，orderSn={}, status={}", orderSn, orderDO.getStatus());
+            return;
+        }
         // 状态机校验：仅待支付订单可流转
         if (orderDO.getStatus() != OrderStatusEnum.PENDING_PAYMENT.getStatus()) {
             throw new ServiceException(OrderCanalErrorCodeEnum.ORDER_STATUS_REVERSAL_ERROR);
@@ -245,6 +249,11 @@ public class OrderServiceImpl implements OrderService {
                 .eq(OrderDO::getOrderSn, orderSn));
         if (orderDO == null) {
             throw new ServiceException(OrderCanalErrorCodeEnum.ORDER_CANAL_UNKNOWN_ERROR);
+        }
+        if (Objects.equals(orderDO.getStatus(), targetOrderStatus)
+                && Objects.equals(targetOrderStatus, OrderStatusEnum.FULL_REFUND.getStatus())) {
+            log.info("退款状态流转重复消息忽略，orderSn={}, status={}", orderSn, orderDO.getStatus());
+            return;
         }
         if (orderDO.getStatus() != OrderStatusEnum.ALREADY_PAID.getStatus()
                 && orderDO.getStatus() != OrderStatusEnum.PARTIAL_REFUND.getStatus()) {
@@ -310,6 +319,6 @@ public class OrderServiceImpl implements OrderService {
 
     private Integer parsePayType(String channel) {
         // 0支付宝 1微信，缺省 0
-        return "wechat".equalsIgnoreCase(channel) ? 1 : 0;
+        return "WECHAT_PAY".equalsIgnoreCase(channel) || "wechat".equalsIgnoreCase(channel) ? 1 : 0;
     }
 }

@@ -197,6 +197,7 @@ class UserServiceFlowTests {
         updateReq.setUsername(USERNAME);
         updateReq.setPhone(newPhone);
         updateReq.setRealName("改名用户");
+        mockLoginUser(USERNAME);
         userService.update(updateReq);
 
         UserQueryRespDTO queried = userService.queryUserByUsername(USERNAME);
