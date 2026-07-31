@@ -393,8 +393,22 @@ success
 
 ```text
 data: {"type":"token","content":"正在查询"}
+data: {"type":"thinking","content":"正在调用业务工具：queryOrder"}
+data: {"type":"tool_call","name":"queryOrder","args":{"orderSn":"..."}}
+data: {"type":"tool_result","name":"queryOrder","args":{"orderSn":"..."},"result":{"orderSn":"...","status":10},"sources":[]}
 data: {"type":"done","sessionId":"..."}
 ```
+
+SSE 事件说明：
+
+| type | 说明 |
+| --- | --- |
+| `token` | 助手自然语言回复片段 |
+| `thinking` | 服务端业务处理进度，例如准备调用工具 |
+| `tool_call` | Function Calling 工具调用参数 |
+| `tool_result` | 工具执行结果；`searchKnowledge` 会额外返回 `sources` 信息来源 |
+| `done` | 本轮完成，返回会话 ID |
+| `error` | 本轮失败，返回错误信息 |
 
 客服工具会基于当前登录用户做订单归属校验。
 

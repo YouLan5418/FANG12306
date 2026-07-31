@@ -1,5 +1,11 @@
+import request, { unwrap } from "./request"
 import { useAuthStore } from "@/stores/auth"
-import type { CustomerChatReq, CustomerSseEvent } from "@/types/customer"
+import type {
+  ChatHistoryMessage,
+  ChatSession,
+  CustomerChatReq,
+  CustomerSseEvent
+} from "@/types/customer"
 
 interface StreamHandlers {
   onEvent: (event: CustomerSseEvent) => void
@@ -47,6 +53,18 @@ export async function streamCustomerChat(data: CustomerChatReq, handlers: Stream
   } finally {
     reader.releaseLock()
   }
+}
+
+export function listCustomerSessions() {
+  return unwrap<ChatSession[]>(request.get("/customer-service/session/list"))
+}
+
+export function listCustomerMessages(sessionId: string) {
+  return unwrap<ChatHistoryMessage[]>(request.get(`/customer-service/session/${sessionId}/messages`))
+}
+
+export function deleteCustomerSession(sessionId: string) {
+  return unwrap<void>(request.delete(`/customer-service/session/${sessionId}`))
 }
 
 function parseSseLine(line: string, handlers: StreamHandlers) {

@@ -75,8 +75,10 @@ public class FunctionCallingEngine {
                 messages.add(ChatMessage.assistantWithToolCalls(resp.getContent(), resp.getToolCalls()));
                 // 逐个执行工具，结果回填
                 for (ToolCall tc : resp.getToolCalls()) {
+                    callback.onThinking("正在调用业务工具：" + tc.getName());
                     callback.onToolCall(tc);
                     String result = executeToolSafe(tc, ctx);
+                    callback.onToolResult(tc, result);
                     messages.add(ChatMessage.tool(tc.getId(), tc.getName(), result));
                 }
                 // 继续循环，让 LLM 基于工具结果生成下一轮

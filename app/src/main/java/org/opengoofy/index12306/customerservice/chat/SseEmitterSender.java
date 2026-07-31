@@ -5,7 +5,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.Collections;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -16,11 +18,13 @@ import java.util.concurrent.TimeUnit;
  * StreamCallback 适配器，将内容 token 推送到 SseEmitter。
  * 管理 15 秒心跳、60 秒超时，以及在完成/出错/客户端断连时清理资源。
  *
- * SSE 事件统一为 JSON：
- *   {"type":"token","content":"..."}
- *   {"type":"tool_call","name":"...","args":{...}}
- *   {"type":"done","sessionId":"..."}
- *   {"type":"error","message":"..."}
+     * SSE 事件统一为 JSON：
+     *   {"type":"token","content":"..."}
+     *   {"type":"thinking","content":"..."}
+     *   {"type":"tool_call","name":"...","args":{...}}
+     *   {"type":"tool_result","name":"...","args":{...},"result":{},"sources":[]}
+     *   {"type":"done","sessionId":"..."}
+     *   {"type":"error","message":"..."}
  */
 @Slf4j
 public class SseEmitterSender implements StreamCallback {
@@ -103,12 +107,40 @@ public class SseEmitterSender implements StreamCallback {
     }
 
     @Override
+    public void onThinking(String content) {
+        if (completed) {
+            return;
+        }
+        try {
+            emitter.send(SseEmitter.event().data(jsonThinking(content)));
+        } catch (Exception e) {
+            log.debug("SSE 发送失败，客户端可能已断连: {}", e.getMessage());
+            completed = true;
+            stopHeartbeat();
+        }
+    }
+
+    @Override
     public void onToolCall(ToolCall toolCall) {
         if (completed) {
             return;
         }
         try {
             emitter.send(SseEmitter.event().data(jsonToolCall(toolCall)));
+        } catch (Exception e) {
+            log.debug("SSE 发送失败，客户端可能已断连: {}", e.getMessage());
+            completed = true;
+            stopHeartbeat();
+        }
+    }
+
+    @Override
+    public void onToolResult(ToolCall toolCall, String result) {
+        if (completed) {
+            return;
+        }
+        try {
+            emitter.send(SseEmitter.event().data(jsonToolResult(toolCall, result)));
         } catch (Exception e) {
             log.debug("SSE 发送失败，客户端可能已断连: {}", e.getMessage());
             completed = true;
@@ -158,11 +190,29 @@ public class SseEmitterSender implements StreamCallback {
         return JSON.toJSONString(payload);
     }
 
+    private String jsonThinking(String content) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("type", "thinking");
+        payload.put("content", content);
+        return JSON.toJSONString(payload);
+    }
+
     private String jsonToolCall(ToolCall toolCall) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("type", "tool_call");
         payload.put("name", toolCall.getName());
         payload.put("args", parseArgs(toolCall.getArguments()));
+        return JSON.toJSONString(payload);
+    }
+
+    private String jsonToolResult(ToolCall toolCall, String result) {
+        Object parsedResult = parseJson(result);
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("type", "tool_result");
+        payload.put("name", toolCall.getName());
+        payload.put("args", parseArgs(toolCall.getArguments()));
+        payload.put("result", parsedResult);
+        payload.put("sources", extractSources(toolCall.getName(), parsedResult));
         return JSON.toJSONString(payload);
     }
 
@@ -185,11 +235,37 @@ public class SseEmitterSender implements StreamCallback {
         if (arguments == null || arguments.isBlank()) {
             return Collections.emptyMap();
         }
+        return parseJson(arguments);
+    }
+
+    private Object parseJson(String content) {
+        if (content == null || content.isBlank()) {
+            return Collections.emptyMap();
+        }
         try {
-            Object parsed = JSON.parse(arguments);
+            Object parsed = JSON.parse(content);
             return parsed != null ? parsed : Collections.emptyMap();
         } catch (Exception e) {
-            return arguments;
+            return content;
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> extractSources(String toolName, Object result) {
+        if (!"searchKnowledge".equals(toolName) || !(result instanceof List<?> list)) {
+            return Collections.emptyList();
+        }
+        List<Map<String, Object>> sources = new ArrayList<>();
+        int index = 1;
+        for (Object item : list) {
+            if (item instanceof Map<?, ?> raw) {
+                Map<String, Object> source = new LinkedHashMap<>();
+                source.put("title", "知识片段 " + index++);
+                source.put("content", raw.get("content"));
+                source.put("score", raw.get("score"));
+                sources.add(source);
+            }
+        }
+        return sources;
     }
 }

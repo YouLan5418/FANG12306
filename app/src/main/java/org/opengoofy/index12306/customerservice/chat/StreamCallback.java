@@ -18,6 +18,12 @@ public interface StreamCallback {
     default void onToolCall(ToolCall toolCall) {
     }
 
+    /**
+     * 工具执行完成后通知前端，推送 tool_result 事件。
+     */
+    default void onToolResult(ToolCall toolCall, String result) {
+    }
+
     void onComplete();
 
     void onError(Throwable error);
