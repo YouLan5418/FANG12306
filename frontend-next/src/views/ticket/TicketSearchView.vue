@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { reactive, ref } from "vue"
+import { computed, onMounted, reactive, ref } from "vue"
 import { useRouter } from "vue-router"
 import { Calendar, Location, Search } from "@element-plus/icons-vue"
-import { searchTickets } from "@/api/ticket"
-import type { TicketItem } from "@/types/ticket"
+import { listStations, searchTickets } from "@/api/ticket"
+import type { StationOption, TicketItem } from "@/types/ticket"
 
 const router = useRouter()
 const query = reactive({
@@ -14,6 +14,8 @@ const query = reactive({
 })
 
 const loading = ref(false)
+const stationLoading = ref(false)
+const stations = ref<StationOption[]>([])
 const tickets = ref<TicketItem[]>([])
 const total = ref(0)
 
@@ -24,6 +26,32 @@ const seatTypeText: Record<number, string> = {
   3: "硬座",
   4: "硬卧",
   5: "软卧"
+}
+
+const groupedStations = computed(() => {
+  const groups = new Map<string, StationOption[]>()
+  stations.value.forEach((station) => {
+    const regionName = station.regionName || station.region || "其他"
+    const list = groups.get(regionName) || []
+    list.push(station)
+    groups.set(regionName, list)
+  })
+
+  return Array.from(groups.entries())
+    .sort(([left], [right]) => left.localeCompare(right, "zh-CN"))
+    .map(([regionName, options]) => ({
+      regionName,
+      options: options.sort((left, right) => left.name.localeCompare(right.name, "zh-CN"))
+    }))
+})
+
+async function loadStations() {
+  stationLoading.value = true
+  try {
+    stations.value = await listStations()
+  } finally {
+    stationLoading.value = false
+  }
 }
 
 async function submit() {
@@ -41,6 +69,8 @@ function reserve(row: TicketItem) {
   sessionStorage.setItem("index12306.selectedTicket", JSON.stringify(row))
   router.push({ name: "purchaseConfirm" })
 }
+
+onMounted(loadStations)
 </script>
 
 <template>
@@ -48,10 +78,54 @@ function reserve(row: TicketItem) {
     <el-card shadow="never">
       <el-form class="search-form" :model="query" @submit.prevent="submit">
         <el-form-item label="出发地">
-          <el-input v-model="query.departure" :prefix-icon="Location" placeholder="例如 北京南" />
+          <el-select
+            v-model="query.departure"
+            :loading="stationLoading"
+            clearable
+            filterable
+            placeholder="选择出发站"
+          >
+            <template #prefix>
+              <el-icon><Location /></el-icon>
+            </template>
+            <el-option-group
+              v-for="group in groupedStations"
+              :key="group.regionName"
+              :label="group.regionName"
+            >
+              <el-option
+                v-for="station in group.options"
+                :key="station.code || station.name"
+                :label="`${station.name} ${station.spell || ''} ${station.code || ''}`"
+                :value="station.name"
+              />
+            </el-option-group>
+          </el-select>
         </el-form-item>
         <el-form-item label="到达地">
-          <el-input v-model="query.arrival" :prefix-icon="Location" placeholder="例如 上海虹桥" />
+          <el-select
+            v-model="query.arrival"
+            :loading="stationLoading"
+            clearable
+            filterable
+            placeholder="选择到达站"
+          >
+            <template #prefix>
+              <el-icon><Location /></el-icon>
+            </template>
+            <el-option-group
+              v-for="group in groupedStations"
+              :key="group.regionName"
+              :label="group.regionName"
+            >
+              <el-option
+                v-for="station in group.options"
+                :key="station.code || station.name"
+                :label="`${station.name} ${station.spell || ''} ${station.code || ''}`"
+                :value="station.name"
+              />
+            </el-option-group>
+          </el-select>
         </el-form-item>
         <el-form-item label="乘车日期">
           <el-date-picker

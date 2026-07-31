@@ -1,6 +1,10 @@
 export interface StationOption {
+  id?: number
   code: string
   name: string
+  spell?: string
+  region?: string
+  regionName?: string
 }
 
 export interface TicketSearchReq {

@@ -11,6 +11,10 @@ export function listStations() {
   return unwrap<StationOption[]>(request.get("/ticket-service/station/all"))
 }
 
+export function listStationRegions() {
+  return unwrap<string[]>(request.get("/ticket-service/station/regions"))
+}
+
 export function searchTickets(params: TicketSearchReq) {
   return unwrap<TicketPageResp>(request.get("/ticket-service/ticket/query", { params }))
 }

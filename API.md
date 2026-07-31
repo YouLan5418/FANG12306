@@ -122,8 +122,15 @@
 | --- | --- | --- | --- |
 | `GET` | `/api/ticket-service/ticket/query` | 公开 | 按出发站/到达站查询车票 |
 | `GET` | `/api/ticket-service/station/all` | 公开 | 查询全部车站 |
+| `GET` | `/api/ticket-service/station/regions` | 公开 | 查询全部车站区域 |
 | `GET` | `/api/ticket-service/region-station/query` | 公开 | 按区域或名称查询车站 |
 | `GET` | `/api/ticket-service/train-station/query` | 公开 | 查询车次经停站 |
+
+说明：
+
+- `/station/all`、`/station/regions`、`/region-station/query` 使用 Redis 缓存，缓存时间 24 小时。
+- `/region-station/query` 的 `region` 同时匹配 `region` 和 `regionName`，`name` 支持站名、拼音、车站编码模糊查询。
+- 前端出发地/到达地建议使用 `/station/all` 拉取站点后按 `regionName` 分组，用户选择后向查票接口传站名。
 
 `GET /api/ticket-service/ticket/query`
 
