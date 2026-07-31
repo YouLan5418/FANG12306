@@ -33,6 +33,10 @@ public class TrainSeatTypeSelector {
         for (PurchaseTicketPassengerDetailDTO p : requestParam.getPassengers()) {
             seatTypePassengers.computeIfAbsent(p.getSeatType(), k -> new ArrayList<>()).add(p.getPassengerId());
         }
+        Map<String, Integer> ticketTypeMap = new LinkedHashMap<>();
+        for (PurchaseTicketPassengerDetailDTO p : requestParam.getPassengers()) {
+            ticketTypeMap.put(p.getPassengerId(), p.getTicketType() == null ? 0 : p.getTicketType());
+        }
         List<TrainPurchaseTicketRespDTO> all = new ArrayList<>();
         seatTypePassengers.forEach((seatType, passengerIds) -> {
             IPurchaseTicket handler = handlerMap.get(seatType);
@@ -43,6 +47,7 @@ public class TrainSeatTypeSelector {
             for (int i = 0; i < seats.size(); i++) {
                 TrainPurchaseTicketRespDTO seat = seats.get(i);
                 seat.setPassengerId(passengerIds.get(i));
+                seat.setTicketType(ticketTypeMap.getOrDefault(passengerIds.get(i), 0));
                 PassengerActualInfo info = passengerInfoMap.get(passengerIds.get(i));
                 if (info != null) {
                     seat.setRealName(info.realName);

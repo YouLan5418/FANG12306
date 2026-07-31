@@ -15,4 +15,5 @@ public class UserInfoDTO {
     private String username;
     private String realName;
     private String token;
+    private Integer role;
 }

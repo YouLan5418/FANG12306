@@ -208,6 +208,8 @@ class PayServiceFlowTests {
     }
 
     private Long seedTrainBase(int secondCount) {
+        Date departureTime = new Date(System.currentTimeMillis() + 3_600_000L);
+        Date arrivalTime = new Date(System.currentTimeMillis() + 7_200_000L);
         TrainDO train = new TrainDO();
         train.setId(SnowflakeIdUtil.nextId());
         train.setTrainNumber("G" + train.getId());
@@ -216,8 +218,8 @@ class PayServiceFlowTests {
         train.setEndStation(ARRIVAL);
         train.setSaleTime(new Date());
         train.setSaleStatus(0);
-        train.setDepartureTime(new Date());
-        train.setArrivalTime(new Date());
+        train.setDepartureTime(departureTime);
+        train.setArrivalTime(arrivalTime);
         trainMapper.insert(train);
         Long trainId = train.getId();
         stringRedisTemplate.delete(TicketCacheConstant.TRAIN_STATION_REMAINING_TICKET + trainId + "_" + DEPARTURE + "_" + ARRIVAL);
@@ -228,8 +230,8 @@ class PayServiceFlowTests {
         relation.setArrival(ARRIVAL);
         relation.setDepartureFlag(1);
         relation.setArrivalFlag(1);
-        relation.setDepartureTime(new Date());
-        relation.setArrivalTime(new Date());
+        relation.setDepartureTime(departureTime);
+        relation.setArrivalTime(arrivalTime);
         relationMapper.insert(relation);
 
         for (int seatType : new int[]{0, 1, 2}) {

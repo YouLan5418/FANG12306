@@ -285,8 +285,50 @@ class TicketServiceFlowTests {
         assertEquals("3", stringRedisTemplate.opsForHash().get(key, "2"));
     }
 
+    @Test
+    void testPurchaseAfterDepartureRejected() {
+        Long trainId = seedTrainBase(3);
+        TrainDO train = trainMapper.selectById(trainId);
+        Date pastDeparture = new Date(System.currentTimeMillis() - 3_600_000L);
+        train.setDepartureTime(pastDeparture);
+        trainMapper.updateById(train);
+        TrainStationRelationDO relation = relationMapper.selectOne(com.baomidou.mybatisplus.core.toolkit.Wrappers.lambdaQuery(TrainStationRelationDO.class)
+                .eq(TrainStationRelationDO::getTrainId, trainId)
+                .eq(TrainStationRelationDO::getDeparture, DEPARTURE)
+                .eq(TrainStationRelationDO::getArrival, ARRIVAL));
+        relation.setDepartureTime(pastDeparture);
+        relationMapper.updateById(relation);
+
+        String passengerId = registerUserAndPassenger("departed");
+        PurchaseTicketReqDTO req = buildPurchaseReq(trainId, passengerId);
+
+        assertThrows(AbstractException.class, () -> ticketService.purchaseTickets(req));
+    }
+
+    @Test
+    void testPassengerTimeConflictRejected() {
+        Long firstTrainId = seedTrainBase(3);
+        String passengerId = registerUserAndPassenger("conflict");
+        ticketService.purchaseTickets(buildPurchaseReq(firstTrainId, passengerId));
+
+        Long secondTrainId = seedTrainBase(3);
+        assertThrows(AbstractException.class, () -> ticketService.purchaseTickets(buildPurchaseReq(secondTrainId, passengerId)));
+    }
+
+    @Test
+    void testInvalidStudentTicketRejected() {
+        Long trainId = seedTrainBase(3);
+        String passengerId = registerUserAndPassenger("student");
+        PurchaseTicketReqDTO req = buildPurchaseReq(trainId, passengerId);
+        req.getPassengers().get(0).setTicketType(2);
+
+        assertThrows(AbstractException.class, () -> ticketService.purchaseTickets(req));
+    }
+
     /** 建车次/区间/票价，并按 seatType 各放若干座位（二等座 secondCount 张） */
     private Long seedTrainBase(int secondCount) {
+        Date departureTime = new Date(System.currentTimeMillis() + 3_600_000L);
+        Date arrivalTime = new Date(System.currentTimeMillis() + 7_200_000L);
         TrainDO train = new TrainDO();
         train.setId(SnowflakeIdUtil.nextId());
         train.setTrainNumber("G" + train.getId());
@@ -295,8 +337,8 @@ class TicketServiceFlowTests {
         train.setEndStation(ARRIVAL);
         train.setSaleTime(new Date());
         train.setSaleStatus(0);
-        train.setDepartureTime(new Date());
-        train.setArrivalTime(new Date());
+        train.setDepartureTime(departureTime);
+        train.setArrivalTime(arrivalTime);
         trainMapper.insert(train);
         Long trainId = train.getId();
         stringRedisTemplate.delete(TicketCacheConstant.TRAIN_STATION_REMAINING_TICKET + trainId + "_" + DEPARTURE + "_" + ARRIVAL);
@@ -307,8 +349,8 @@ class TicketServiceFlowTests {
         relation.setArrival(ARRIVAL);
         relation.setDepartureFlag(1);
         relation.setArrivalFlag(1);
-        relation.setDepartureTime(new Date());
-        relation.setArrivalTime(new Date());
+        relation.setDepartureTime(departureTime);
+        relation.setArrivalTime(arrivalTime);
         relationMapper.insert(relation);
 
         for (int seatType : new int[]{0, 1, 2}) {
@@ -324,5 +366,17 @@ class TicketServiceFlowTests {
         seedSeats(trainId, 1, 2);
         seedSeats(trainId, 2, secondCount);
         return trainId;
+    }
+
+    private PurchaseTicketReqDTO buildPurchaseReq(Long trainId, String passengerId) {
+        PurchaseTicketReqDTO req = new PurchaseTicketReqDTO();
+        req.setTrainId(String.valueOf(trainId));
+        req.setDeparture(DEPARTURE);
+        req.setArrival(ARRIVAL);
+        PurchaseTicketPassengerDetailDTO passenger = new PurchaseTicketPassengerDetailDTO();
+        passenger.setPassengerId(passengerId);
+        passenger.setSeatType(2);
+        req.setPassengers(List.of(passenger));
+        return req;
     }
 }

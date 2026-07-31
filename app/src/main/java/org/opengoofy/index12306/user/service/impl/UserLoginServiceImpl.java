@@ -93,7 +93,7 @@ public class UserLoginServiceImpl implements UserLoginService {
                 .eq(UserDO::getUsername, username)
                 .eq(UserDO::getDeletionTime, 0L)
                 .eq(UserDO::getPassword, requestParam.getPassword())
-                .select(UserDO::getId, UserDO::getUsername, UserDO::getRealName));
+                .select(UserDO::getId, UserDO::getUsername, UserDO::getRealName, UserDO::getUserType));
         if (userDO == null) {
             throw new ServiceException("账号不存在或密码错误");
         }
@@ -101,6 +101,7 @@ public class UserLoginServiceImpl implements UserLoginService {
                 .userId(String.valueOf(userDO.getId()))
                 .username(userDO.getUsername())
                 .realName(userDO.getRealName())
+                .role(userDO.getUserType())
                 .build();
         String accessToken = JWTUtil.generateAccessToken(userInfo);
         UserLoginRespDTO response = UserLoginRespDTO.builder()
@@ -108,6 +109,7 @@ public class UserLoginServiceImpl implements UserLoginService {
                 .username(userInfo.getUsername())
                 .realName(userInfo.getRealName())
                 .accessToken(accessToken)
+                .role(userInfo.getRole())
                 .build();
         distributedCache.put(UserConstant.LOGIN_TOKEN_KEY_PREFIX + accessToken, JSON.toJSONString(response), 30, TimeUnit.MINUTES);
         return response;

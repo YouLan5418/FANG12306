@@ -18,4 +18,5 @@ public class UserLoginRespDTO {
     private String username;
     private String realName;
     private String accessToken;
+    private Integer role;
 }

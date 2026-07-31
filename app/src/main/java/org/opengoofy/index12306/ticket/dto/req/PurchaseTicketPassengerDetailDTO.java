@@ -10,4 +10,6 @@ public class PurchaseTicketPassengerDetailDTO {
 
     private String passengerId;
     private Integer seatType;
+    /** 票种：0成人 1儿童 2学生，缺省为成人。 */
+    private Integer ticketType;
 }

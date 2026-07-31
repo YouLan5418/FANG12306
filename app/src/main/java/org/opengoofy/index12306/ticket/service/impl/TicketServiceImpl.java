@@ -7,12 +7,18 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.opengoofy.index12306.common.core.UserContext;
+import org.opengoofy.index12306.common.toolkit.AESCryptUtil;
 import org.opengoofy.index12306.framework.convention.exception.ClientException;
 import org.opengoofy.index12306.framework.convention.exception.ServiceException;
 import org.opengoofy.index12306.framework.idempotent.annotation.Idempotent;
 import org.opengoofy.index12306.framework.idempotent.enums.IdempotentSceneEnum;
 import org.opengoofy.index12306.framework.idempotent.enums.IdempotentTypeEnum;
+import org.opengoofy.index12306.order.common.enums.OrderItemStatusEnum;
+import org.opengoofy.index12306.order.common.enums.OrderStatusEnum;
+import org.opengoofy.index12306.order.dao.entity.OrderDO;
 import org.opengoofy.index12306.order.dao.entity.OrderItemDO;
+import org.opengoofy.index12306.order.dao.mapper.OrderItemMapper;
+import org.opengoofy.index12306.order.dao.mapper.OrderMapper;
 import org.opengoofy.index12306.pay.dto.req.RefundDetailReqDTO;
 import org.opengoofy.index12306.order.dto.req.CancelTicketOrderReqDTO;
 import org.opengoofy.index12306.order.dto.req.TicketOrderCreateReqDTO;
@@ -75,6 +81,8 @@ public class TicketServiceImpl implements TicketService {
     private final TrainStationRelationMapper trainStationRelationMapper;
     private final TrainStationPriceMapper trainStationPriceMapper;
     private final TicketMapper ticketMapper;
+    private final OrderMapper orderMapper;
+    private final OrderItemMapper orderItemMapper;
     private final SeatService seatService;
     private final TrainStationService trainStationService;
     private final TrainSeatTypeSelector trainSeatTypeSelector;
@@ -140,6 +148,7 @@ public class TicketServiceImpl implements TicketService {
         Map<String, TrainSeatTypeSelector.PassengerActualInfo> infoMap = passengerActuals.stream()
                 .collect(Collectors.toMap(PassengerActualRespDTO::getId,
                         p -> new TrainSeatTypeSelector.PassengerActualInfo(p.getRealName(), p.getIdType(), p.getIdCard(), p.getPhone())));
+        validateBusinessRules(requestParam, trainId, passengerActuals);
 
         // 按 seatType 分组令牌桶扣减
         Map<Integer, Long> seatTypeCount = requestParam.getPassengers().stream()
@@ -226,18 +235,20 @@ public class TicketServiceImpl implements TicketService {
         if (items.isEmpty()) {
             return;
         }
-        List<Long> trainIds = new ArrayList<>();
-        List<String> carriages = new ArrayList<>();
-        List<String> seatNumbers = new ArrayList<>();
         Map<Integer, Integer> seatTypeCount = new HashMap<>();
-        for (OrderItemDO item : items) {
-            trainIds.add(item.getTrainId());
-            carriages.add(item.getCarriageNumber());
-            seatNumbers.add(item.getSeatNumber());
-            seatTypeCount.merge(item.getSeatType(), 1, Integer::sum);
-        }
-        seatService.unlockSeats(trainIds, carriages, seatNumbers);
         Long trainId = items.get(0).getTrainId();
+        for (OrderItemDO item : items) {
+            int released = seatService.releaseSeatByPosition(trainId, item.getCarriageNumber(), item.getSeatNumber());
+            if (released > 0) {
+                seatTypeCount.merge(item.getSeatType(), 1, Integer::sum);
+                ticketMapper.update(null, Wrappers.lambdaUpdate(TicketDO.class)
+                        .eq(TicketDO::getTrainId, trainId)
+                        .eq(TicketDO::getCarriageNumber, item.getCarriageNumber())
+                        .eq(TicketDO::getSeatNumber, item.getSeatNumber())
+                        .eq(TicketDO::getUsername, item.getUsername())
+                        .set(TicketDO::getTicketStatus, TicketStatusEnum.UNPAID.getCode()));
+            }
+        }
         org.opengoofy.index12306.order.dto.resp.TicketOrderDetailRespDTO detail = orderService.queryTicketOrderByOrderSn(orderSn);
         for (Map.Entry<Integer, Integer> e : seatTypeCount.entrySet()) {
             incrementRemaining(trainId, e.getKey(), detail.getDeparture(), detail.getArrival(), e.getValue());
@@ -298,6 +309,20 @@ public class TicketServiceImpl implements TicketService {
         log.info("订单 {} 退款回滚完成，座位与余票已恢复", orderSn);
     }
 
+    @Override
+    public void refreshRemainingTicketCache(Long trainId, String departure, String arrival) {
+        String key = remainingKey(trainId, departure, arrival);
+        List<TrainStationPriceDO> prices = trainStationPriceMapper.selectList(
+                Wrappers.lambdaQuery(TrainStationPriceDO.class)
+                        .eq(TrainStationPriceDO::getTrainId, trainId)
+                        .eq(TrainStationPriceDO::getDeparture, departure)
+                        .eq(TrainStationPriceDO::getArrival, arrival));
+        for (TrainStationPriceDO price : prices) {
+            int remaining = seatService.countAvailable(trainId, price.getSeatType(), departure, arrival);
+            stringRedisTemplate.opsForHash().put(key, price.getSeatType().toString(), String.valueOf(remaining));
+        }
+    }
+
     // ---------- 私有辅助 ----------
 
     private void validatePurchase(PurchaseTicketReqDTO req) {
@@ -305,6 +330,75 @@ public class TicketServiceImpl implements TicketService {
                 || req.getDeparture() == null || req.getArrival() == null) {
             throw new ClientException("购票参数缺失");
         }
+    }
+
+    private void validateBusinessRules(PurchaseTicketReqDTO req, Long trainId, List<PassengerActualRespDTO> passengerActuals) {
+        TrainDO train = trainMapper.selectById(trainId);
+        if (train == null) {
+            throw new ClientException("车次不存在");
+        }
+        TrainStationRelationDO relation = trainStationService.getRelation(trainId, req.getDeparture(), req.getArrival());
+        if (relation == null) {
+            throw new ClientException("车次区间不存在");
+        }
+        Date now = new Date();
+        if (relation.getDepartureTime() != null && !relation.getDepartureTime().after(now)) {
+            throw new ClientException("列车已发车，无法购票");
+        }
+        if (train.getSaleTime() != null && train.getSaleTime().after(now)) {
+            throw new ClientException("车票尚未开售");
+        }
+        validateTicketType(req, passengerActuals);
+        validatePassengerTimeConflict(passengerActuals, relation);
+    }
+
+    private void validateTicketType(PurchaseTicketReqDTO req, List<PassengerActualRespDTO> passengerActuals) {
+        Map<String, PassengerActualRespDTO> actualMap = passengerActuals.stream()
+                .collect(Collectors.toMap(PassengerActualRespDTO::getId, each -> each));
+        for (var passenger : req.getPassengers()) {
+            int ticketType = passenger.getTicketType() == null ? 0 : passenger.getTicketType();
+            if (ticketType < 0 || ticketType > 2) {
+                throw new ClientException("不支持的票种: " + ticketType);
+            }
+            PassengerActualRespDTO actual = actualMap.get(passenger.getPassengerId());
+            if (actual == null) {
+                throw new ClientException("乘车人不存在: " + passenger.getPassengerId());
+            }
+            if (ticketType == 2 && !Objects.equals(actual.getDiscountType(), 2)) {
+                throw new ClientException("乘车人不符合学生票购买条件");
+            }
+        }
+    }
+
+    private void validatePassengerTimeConflict(List<PassengerActualRespDTO> passengerActuals, TrainStationRelationDO relation) {
+        List<String> encryptedIdCards = passengerActuals.stream()
+                .map(PassengerActualRespDTO::getIdCard)
+                .filter(Objects::nonNull)
+                .map(AESCryptUtil::encrypt)
+                .toList();
+        if (encryptedIdCards.isEmpty()) {
+            return;
+        }
+        List<OrderItemDO> activeItems = orderItemMapper.selectList(Wrappers.lambdaQuery(OrderItemDO.class)
+                .in(OrderItemDO::getIdCard, encryptedIdCards)
+                .in(OrderItemDO::getStatus, OrderItemStatusEnum.PENDING_PAYMENT.getStatus(), OrderItemStatusEnum.ALREADY_PAID.getStatus()));
+        for (OrderItemDO item : activeItems) {
+            OrderDO order = orderMapper.selectOne(Wrappers.lambdaQuery(OrderDO.class)
+                    .eq(OrderDO::getOrderSn, item.getOrderSn())
+                    .in(OrderDO::getStatus, OrderStatusEnum.PENDING_PAYMENT.getStatus(),
+                            OrderStatusEnum.ALREADY_PAID.getStatus(), OrderStatusEnum.PARTIAL_REFUND.getStatus()));
+            if (order != null && Objects.equals(order.getRidingDate(), toLocalDate(relation.getDepartureTime()))
+                    && timeOverlap(order.getDepartureTime(), order.getArrivalTime(), relation.getDepartureTime(), relation.getArrivalTime())) {
+                throw new ClientException("乘车人已存在同日时间冲突订单");
+            }
+        }
+    }
+
+    private boolean timeOverlap(Date leftStart, Date leftEnd, Date rightStart, Date rightEnd) {
+        if (leftStart == null || leftEnd == null || rightStart == null || rightEnd == null) {
+            return false;
+        }
+        return leftStart.before(rightEnd) && rightStart.before(leftEnd);
     }
 
     private java.util.concurrent.locks.ReentrantLock localLock(Long trainId) {

@@ -32,4 +32,7 @@ public interface TicketService {
 
     /** 退款：座位置可用 + 余票恢复 + t_ticket 回滚（修复原项目缺口） */
     void rollbackRefund(String orderSn, java.util.List<org.opengoofy.index12306.pay.dto.req.RefundDetailReqDTO> partialDetails);
+
+    /** 按数据库可用座位重建指定车次区间的 Redis 余票缓存。 */
+    void refreshRemainingTicketCache(Long trainId, String departure, String arrival);
 }

@@ -40,6 +40,7 @@ public final class JWTUtil {
         customerUserMap.put(UserConstant.USER_ID_KEY, userInfo.getUserId());
         customerUserMap.put(UserConstant.USER_NAME_KEY, userInfo.getUsername());
         customerUserMap.put(UserConstant.REAL_NAME_KEY, userInfo.getRealName());
+        customerUserMap.put(UserConstant.USER_ROLE_KEY, userInfo.getRole() != null ? userInfo.getRole() : 0);
         String jwtToken = Jwts.builder()
                 .issuedAt(new Date())
                 .issuer(ISS)
@@ -62,7 +63,11 @@ public final class JWTUtil {
                 Date expiration = claims.getExpiration();
                 if (expiration != null && expiration.after(new Date())) {
                     String subject = claims.getSubject();
-                    return JSON.parseObject(subject, UserInfoDTO.class);
+                    UserInfoDTO userInfo = JSON.parseObject(subject, UserInfoDTO.class);
+                    if (userInfo != null && userInfo.getRole() == null) {
+                        userInfo.setRole((Integer) claims.getOrDefault(UserConstant.USER_ROLE_KEY, 0));
+                    }
+                    return userInfo;
                 }
             } catch (ExpiredJwtException ignored) {
             } catch (Exception ex) {
