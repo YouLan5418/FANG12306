@@ -20,6 +20,7 @@ interface ChatMessage {
   result?: unknown
   sources?: CustomerSource[]
   pending?: boolean
+  collapsed?: boolean
 }
 
 const router = useRouter()
@@ -112,7 +113,7 @@ async function send() {
   }
 
   messages.value.push({ role: "user", content })
-  const assistantIndex = messages.value.push({ role: "assistant", content: "" }) - 1
+  let assistantIndex = -1
   input.value = ""
   sending.value = true
   await scrollToBottom()
@@ -124,9 +125,11 @@ async function send() {
         message: content
       },
       {
-        onEvent: (event) => handleSseEvent(event, assistantIndex),
+        onEvent: (event) => {
+          assistantIndex = handleSseEvent(event, assistantIndex)
+        },
         onError: (error) => {
-          messages.value[assistantIndex].content ||= "客服暂时不可用，请稍后再试。"
+          ensureAssistantMessage(assistantIndex).content ||= "客服暂时不可用，请稍后再试。"
           ElMessage.error(error.message)
         },
         onComplete: () => {
@@ -135,7 +138,7 @@ async function send() {
       }
     )
   } catch (error) {
-    messages.value[assistantIndex].content = "客服暂时不可用，请稍后再试。"
+    ensureAssistantMessage(assistantIndex).content = "客服暂时不可用，请稍后再试。"
     ElMessage.error(error instanceof Error ? error.message : "客服请求失败")
   } finally {
     sending.value = false
@@ -145,9 +148,19 @@ async function send() {
 
 function handleSseEvent(event: CustomerSseEvent, assistantIndex: number) {
   if (event.type === "token") {
+    if (assistantIndex < 0) {
+      collapseProcessMessages()
+      assistantIndex = messages.value.push({ role: "assistant", content: "" }) - 1
+    }
     messages.value[assistantIndex].content += event.content || ""
   } else if (event.type === "thinking") {
-    messages.value.push({ role: "thinking", content: event.content || "正在分析问题..." })
+    const content = event.content || "正在分析问题..."
+    const lastMessage = messages.value[messages.value.length - 1]
+    if (lastMessage?.role === "thinking" && !lastMessage.collapsed) {
+      lastMessage.content += content
+    } else {
+      messages.value.push({ role: "thinking", content })
+    }
   } else if (event.type === "tool_call") {
     messages.value.push({
       role: "tool",
@@ -177,11 +190,28 @@ function handleSseEvent(event: CustomerSseEvent, assistantIndex: number) {
     }
   } else if (event.type === "done") {
     sessionId.value = event.sessionId || sessionId.value
+    collapseProcessMessages()
   } else if (event.type === "error") {
-    messages.value[assistantIndex].content ||= event.message || "客服处理失败"
+    ensureAssistantMessage(assistantIndex).content ||= event.message || "客服处理失败"
     ElMessage.error(event.message || "客服处理失败")
   }
   scrollToBottom()
+  return assistantIndex
+}
+
+function ensureAssistantMessage(index: number) {
+  if (index >= 0 && messages.value[index]?.role === "assistant") {
+    return messages.value[index]
+  }
+  return messages.value[messages.value.push({ role: "assistant", content: "" }) - 1]
+}
+
+function collapseProcessMessages() {
+  messages.value.forEach((message) => {
+    if (message.role === "thinking" || message.role === "tool") {
+      message.collapsed = true
+    }
+  })
 }
 
 function parseMaybeJson(value?: string) {
@@ -253,17 +283,27 @@ async function scrollToBottom() {
         <main v-else ref="chatBodyRef" class="chat-body">
           <div v-for="(message, index) in messages" :key="index" class="message" :class="message.role">
             <template v-if="message.role === 'tool'">
-              <strong>{{ message.toolName || "业务工具" }}</strong>
-              <small>{{ message.content }}</small>
-              <pre>参数：{{ formatValue(message.args) }}</pre>
-              <pre v-if="!message.pending">结果：{{ formatValue(message.result) }}</pre>
-              <div v-if="message.sources?.length" class="sources">
-                <span>信息来源</span>
-                <article v-for="source in message.sources" :key="source.title">
-                  <b>{{ source.title }}</b>
-                  <p>{{ source.content }}</p>
-                </article>
-              </div>
+              <details class="process-details" :open="!message.collapsed">
+                <summary>
+                  <span>{{ message.pending ? "正在调用工具" : "工具调用完成" }}</span>
+                  <b>{{ message.toolName || "业务工具" }}</b>
+                </summary>
+                <pre>参数：{{ formatValue(message.args) }}</pre>
+                <pre v-if="!message.pending">结果：{{ formatValue(message.result) }}</pre>
+                <div v-if="message.sources?.length" class="sources">
+                  <span>信息来源</span>
+                  <article v-for="source in message.sources" :key="source.title">
+                    <b>{{ source.title }}</b>
+                    <p>{{ source.content }}</p>
+                  </article>
+                </div>
+              </details>
+            </template>
+            <template v-else-if="message.role === 'thinking'">
+              <details class="process-details" :open="!message.collapsed">
+                <summary>思考过程</summary>
+                <p>{{ message.content }}</p>
+              </details>
             </template>
             <template v-else>
               <span v-if="message.content">{{ message.content }}</span>
@@ -411,18 +451,51 @@ async function scrollToBottom() {
   align-self: stretch;
   max-width: 100%;
   color: #334155;
-  background: #fff;
-  border: 1px solid #dbeafe;
+  background: #f8fafc;
+  border: 1px solid #d8e2ec;
 }
 
-.message.tool strong,
-.message.tool small {
-  display: block;
+.process-details {
+  display: grid;
+  gap: 8px;
 }
 
-.message.tool small {
-  margin-top: 2px;
+.process-details summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+
+.process-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.process-details summary::before {
+  content: "▸";
+  color: #94a3b8;
+  font-size: 11px;
+  transition: transform 0.16s ease;
+}
+
+.process-details[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.process-details summary b {
+  color: #0f766e;
+}
+
+.process-details p {
+  margin: 8px 0 0;
   color: #64748b;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
 }
 
 .message pre {

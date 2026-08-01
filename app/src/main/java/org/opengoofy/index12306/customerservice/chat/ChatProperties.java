@@ -25,11 +25,27 @@ public class ChatProperties {
     private int timeoutMs = 60000;
 
     /** 限流：每用户每分钟最大消息数 */
-    private int rateLimitPerMinute = 10;
+    private int rateLimitPerMinute = 30;
 
     /** 断路器：连续失败多少次后熔断 */
     private int failureThreshold = 3;
 
     /** 断路器：熔断持续时长（毫秒） */
     private long openDurationMs = 30000;
+
+    private int workerCoreSize = 8;
+
+    private int workerMaxSize = 32;
+
+    private int workerQueueCapacity = 128;
+
+    private int globalMaxConcurrent = 32;
+
+    private int userMaxConcurrent = 1;
+
+    private long ragCacheTtlSeconds = 300;
+
+    private String systemPromptFile = "config/customer-service-system-prompt.md";
+
+    private String systemPrompt = "你是 12306 铁路购票智能客服。请根据业务工具和知识库回答用户问题。";
 }

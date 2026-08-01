@@ -1,5 +1,8 @@
 package org.opengoofy.index12306.customerservice.rerank;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.stereotype.Component;
+
 import java.util.Comparator;
 import java.util.List;
 
@@ -7,6 +10,8 @@ import java.util.List;
  * 空操作重排序客户端，按原始检索分数排序返回。
  * 用于未配置重排序 API 时的兜底，或测试场景。
  */
+@Component
+@ConditionalOnProperty(prefix = "ai.rerank", name = "enabled", havingValue = "false")
 public class NoopRerankClient implements RerankClient {
 
     @Override

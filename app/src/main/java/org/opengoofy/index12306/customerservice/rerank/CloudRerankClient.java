@@ -5,6 +5,7 @@ import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import lombok.extern.slf4j.Slf4j;
 import org.opengoofy.index12306.customerservice.chat.ModelHealthStore;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
@@ -24,6 +25,7 @@ import java.util.List;
  */
 @Slf4j
 @Component
+@ConditionalOnProperty(prefix = "ai.rerank", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class CloudRerankClient implements RerankClient {
 
     private final RerankProperties properties;

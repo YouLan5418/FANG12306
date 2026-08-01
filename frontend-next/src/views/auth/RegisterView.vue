@@ -77,4 +77,23 @@ async function submit() {
   width: 100%;
   margin: 8px 0 12px;
 }
+
+@media (max-width: 520px) {
+  .auth-page {
+    padding: 16px;
+  }
+
+  .register-card h1 {
+    margin-bottom: 18px;
+    font-size: 24px;
+  }
+
+  .register-card :deep(.el-card__body) {
+    padding: 18px;
+  }
+
+  .register-card .el-button {
+    width: 100%;
+  }
+}
 </style>

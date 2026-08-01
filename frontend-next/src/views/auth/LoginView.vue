@@ -134,4 +134,38 @@ async function submit() {
     padding: 32px;
   }
 }
+
+@media (max-width: 520px) {
+  .auth-page {
+    align-items: stretch;
+    padding: 16px;
+  }
+
+  .auth-panel {
+    align-self: center;
+  }
+
+  .auth-intro {
+    padding: 24px 20px;
+  }
+
+  .auth-intro img {
+    width: 44px;
+    height: 44px;
+    margin-bottom: 16px;
+  }
+
+  .auth-intro h1 {
+    font-size: 26px;
+  }
+
+  .auth-intro p {
+    font-size: 14px;
+    line-height: 1.7;
+  }
+
+  .auth-card {
+    padding: 4px 0;
+  }
+}
 </style>

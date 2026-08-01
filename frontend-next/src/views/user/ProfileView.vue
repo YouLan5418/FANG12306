@@ -147,8 +147,22 @@ onMounted(loadProfile)
 }
 
 @media (max-width: 760px) {
+  .profile-page {
+    gap: 12px;
+  }
+
+  .card-header {
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .card-header .el-button {
+    flex: 0 0 auto;
+  }
+
   .profile-form {
     grid-template-columns: 1fr;
+    gap: 12px;
   }
 
   .form-actions {

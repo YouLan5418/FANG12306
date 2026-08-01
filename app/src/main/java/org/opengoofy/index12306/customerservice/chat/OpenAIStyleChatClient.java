@@ -246,6 +246,9 @@ public class OpenAIStyleChatClient implements ChatClient {
     private String buildRequestBody(ChatRequest request, boolean stream) {
         JSONObject body = new JSONObject();
         body.put("model", properties.getModel());
+        if (request.getUserId() != null && !request.getUserId().isBlank()) {
+            body.put("user_id", request.getUserId());
+        }
         if (stream) {
             body.put("stream", true);
         }

@@ -194,6 +194,11 @@ function logout() {
     gap: 6px;
   }
 
+  .header-actions :deep(.el-button) {
+    padding-right: 8px;
+    padding-left: 8px;
+  }
+
   .header-actions :deep(.el-tag) {
     max-width: 112px;
     overflow: hidden;
@@ -206,7 +211,7 @@ function logout() {
   }
 
   .app-main {
-    padding: 16px 0 88px;
+    padding: 14px 0 calc(92px + env(safe-area-inset-bottom));
   }
 
   .page-content {
@@ -214,7 +219,13 @@ function logout() {
   }
 
   .page-title {
+    align-items: flex-start;
     margin-bottom: 14px;
+  }
+
+  .page-title p {
+    margin-bottom: 4px;
+    font-size: 12px;
   }
 
   .page-title h1 {

@@ -37,6 +37,7 @@ public class KeywordSearchChannel implements SearchChannel {
                     .categoryId(r.getCategoryId())
                     .chunkIndex(r.getChunkIndex())
                     .content(r.getContent())
+                    .metadata(r.getMetadata())
                     .score(1.0f)
                     .source(getChannelName())
                     .build());

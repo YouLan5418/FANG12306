@@ -416,25 +416,75 @@ SSE 事件说明：
 
 | 方法 | 路径 | 权限 | 说明 |
 | --- | --- | --- | --- |
-| `POST` | `/api/customer-service/kb/category` | 登录 | 新增分类 |
-| `GET` | `/api/customer-service/kb/category` | 登录 | 分类列表 |
-| `PUT` | `/api/customer-service/kb/category/{id}` | 登录 | 修改分类 |
-| `DELETE` | `/api/customer-service/kb/category/{id}` | 登录 | 删除分类 |
-| `POST` | `/api/customer-service/kb/document/upload` | 登录 | 上传文档并触发入库 |
-| `GET` | `/api/customer-service/kb/document` | 登录 | 文档列表 |
-| `DELETE` | `/api/customer-service/kb/document/{id}` | 登录 | 删除文档 |
-| `GET` | `/api/customer-service/kb/task` | 登录 | 入库任务列表 |
-| `GET` | `/api/customer-service/kb/task/{id}` | 登录 | 入库任务详情 |
-| `POST` | `/api/customer-service/kb/task/{id}/retry` | 登录 | 重试入库任务 |
+| `POST` | `/api/admin/kb/category` | 管理员 | 新增分类 |
+| `GET` | `/api/admin/kb/category` | 管理员 | 分类列表 |
+| `PUT` | `/api/admin/kb/category/{id}` | 管理员 | 修改分类 |
+| `DELETE` | `/api/admin/kb/category/{id}` | 管理员 | 删除分类 |
+| `POST` | `/api/admin/kb/document/upload` | 管理员 | 上传文档并触发入库 |
+| `GET` | `/api/admin/kb/document` | 管理员 | 文档列表 |
+| `DELETE` | `/api/admin/kb/document/{id}` | 管理员 | 删除文档 |
+| `GET` | `/api/admin/kb/task` | 管理员 | 入库任务列表 |
+| `GET` | `/api/admin/kb/task/{id}` | 管理员 | 入库任务详情 |
+| `POST` | `/api/admin/kb/task/{id}/retry` | 管理员 | 重试入库任务 |
+| `GET` | `/api/admin/kb/chunk` | 管理员 | 查询已入库知识切片 |
+| `PUT` | `/api/admin/kb/chunk/{id}` | 管理员 | 修改切片内容并重建向量 |
+| `GET` | `/api/admin/kb/search` | 管理员 | 输入问题测试 RAG 召回片段、score 和来源 |
 
-`POST /api/customer-service/kb/document/upload`
+`POST /api/admin/kb/document/upload`
 
 `multipart/form-data` 参数：
 
 - `file`: 文件
 - `categoryId`: 分类 ID
-- `parserType`: 可选
-- `chunkMode`: 可选
+- `parserType`: 可选；`MARKDOWN`、`TIKA`、`OCR`，不传则自动识别
+- `chunkMode`: 可选；`structure_aware`、`fixed_size`
+
+`GET /api/admin/kb/chunk`
+
+查询参数：
+
+- `documentId`: 可选，按文档 ID 筛选
+- `categoryId`: 可选，按分类 ID 筛选
+- `keyword`: 可选，按切片内容模糊查询
+
+返回字段包含 `id`、`categoryId`、`documentId`、`chunkIndex`、`content`、`metadata`、`embeddingDimension`、`createTime`。
+
+`PUT /api/admin/kb/chunk/{id}`
+
+```json
+{
+  "content": "更新后的知识正文"
+}
+```
+
+说明：保存后服务端会用当前 embedding 配置重新生成该切片向量。
+
+`GET /api/admin/kb/search`
+
+查询参数：
+
+- `query`: 必填，用户问题或检索文本
+- `categoryId`: 可选，限定知识库分类
+- `topK`: 可选，默认 `5`，范围 `1` 到 `20`
+
+返回：
+
+```json
+[
+  {
+    "chunkId": "2083093199123472384",
+    "categoryId": 1,
+    "documentId": 10,
+    "chunkIndex": 3,
+    "content": "退票规则正文片段...",
+    "score": 0.8721,
+    "source": "vector+context",
+    "metadata": "{\"title\":\"退票规则\"}"
+  }
+]
+```
+
+说明：该接口复用线上 RAG 检索链路，会触发 embedding、向量检索、关键词检索、rerank 和上下文窗口扩展；相邻窗口扩展后的重复 chunk 会在服务端去重。
 
 ## 管理后台 `/api/admin`
 

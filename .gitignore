@@ -23,10 +23,14 @@ nul
 logs/
 log/
 
+### Local secrets ###
+.env
+
 ### Frontend ###
 node_modules/
 dist/
 .env.local
+test-results/
 
 ### Local / migrated workspace artifacts ###
 .codegraph/

@@ -39,6 +39,7 @@ public class VectorSearchChannel implements SearchChannel {
                     .categoryId(r.getCategoryId())
                     .chunkIndex(r.getChunkIndex())
                     .content(r.getContent())
+                    .metadata(r.getMetadata())
                     .score(r.getScore() != null ? r.getScore().floatValue() : 0f)
                     .source(getChannelName())
                     .build());

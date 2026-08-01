@@ -1,7 +1,11 @@
 package org.opengoofy.index12306.customerservice.chat;
 
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Method;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -12,6 +16,25 @@ import static org.junit.jupiter.api.Assertions.*;
  * P7-T1 单元测试：ModelHealthStore 断路器、ProbeStreamCallback 首包分流、MockChatClient。
  */
 class ChatClientTests {
+
+    @Test
+    void buildRequestBody_includesUserIdForDeepSeekIsolation() throws Exception {
+        ChatProperties properties = new ChatProperties();
+        properties.setModel("deepseek-v4-flash");
+        OpenAIStyleChatClient client = new OpenAIStyleChatClient(properties, new ModelHealthStore(properties));
+        ChatRequest request = ChatRequest.builder()
+                .messages(List.of(ChatMessage.user("退票规则是什么")))
+                .userId("u_12345")
+                .build();
+
+        Method method = OpenAIStyleChatClient.class.getDeclaredMethod("buildRequestBody", ChatRequest.class, boolean.class);
+        method.setAccessible(true);
+        String bodyJson = (String) method.invoke(client, request, true);
+        JSONObject body = JSON.parseObject(bodyJson);
+
+        assertEquals("u_12345", body.getString("user_id"));
+        assertEquals(Boolean.TRUE, body.getBoolean("stream"));
+    }
 
     // ==================== ModelHealthStore 断路器测试 ====================
 
@@ -118,6 +141,35 @@ class ChatClientTests {
         assertTrue(store.allowCall(modelId));
     }
 
+    @Test
+    void aiConcurrencyLimiter_blocksSecondRequestForSameUser() {
+        ChatProperties props = new ChatProperties();
+        props.setGlobalMaxConcurrent(2);
+        props.setUserMaxConcurrent(1);
+        AiConcurrencyLimiter limiter = new AiConcurrencyLimiter(props);
+
+        AiConcurrencyLimiter.Permit first = limiter.acquire("user1");
+        RuntimeException error = assertThrows(RuntimeException.class, () -> limiter.acquire("user1"));
+        assertTrue(error.getMessage().contains("当前账号已有客服请求处理中"));
+
+        first.close();
+        assertDoesNotThrow(() -> limiter.acquire("user1").close());
+    }
+
+    @Test
+    void aiConcurrencyLimiter_blocksWhenGlobalLimitReached() {
+        ChatProperties props = new ChatProperties();
+        props.setGlobalMaxConcurrent(1);
+        props.setUserMaxConcurrent(1);
+        AiConcurrencyLimiter limiter = new AiConcurrencyLimiter(props);
+
+        AiConcurrencyLimiter.Permit first = limiter.acquire("user1");
+        RuntimeException error = assertThrows(RuntimeException.class, () -> limiter.acquire("user2"));
+        assertTrue(error.getMessage().contains("智能客服繁忙"));
+
+        first.close();
+    }
+
     // ==================== ProbeStreamCallback 首包分流测试 ====================
 
     @Test
@@ -146,8 +198,8 @@ class ChatClientTests {
         ProbeStreamCallback probe = new ProbeStreamCallback(downstream);
         probe.onContent("Hello");
         probe.onContent(" world");
-        capturedMode.set(probe.getMode());
         probe.onComplete();
+        capturedMode.set(probe.getMode());
 
         assertTrue(completeLatch.await(1, TimeUnit.SECONDS));
         assertEquals(ProbeStreamCallback.StreamMode.CONTENT, capturedMode.get());
@@ -161,12 +213,18 @@ class ChatClientTests {
     @Test
     void probeStreamCallback_toolCallMode_suppressesContent() {
         AtomicReference<String> receivedContent = new AtomicReference<>("");
+        AtomicReference<String> thinkingContent = new AtomicReference<>("");
         AtomicReference<Boolean> onCompleteCalled = new AtomicReference<>(false);
 
         StreamCallback downstream = new StreamCallback() {
             @Override
             public void onContent(String content) {
                 receivedContent.updateAndGet(s -> s + content);
+            }
+
+            @Override
+            public void onThinking(String content) {
+                thinkingContent.updateAndGet(s -> s + content);
             }
 
             @Override
@@ -187,6 +245,7 @@ class ChatClientTests {
 
         assertEquals(ProbeStreamCallback.StreamMode.TOOL_CALL, probe.getMode());
         assertEquals("", receivedContent.get());
+        assertEquals("", thinkingContent.get());
         assertFalse(onCompleteCalled.get(), "onComplete should NOT be called in TOOL_CALL mode");
 
         ChatResponse resp = probe.toChatResponse();
@@ -196,6 +255,51 @@ class ChatClientTests {
         assertEquals("call_1", tc.getId());
         assertEquals("queryTicket", tc.getName());
         assertEquals("{\"departure\":\"BJ\"}", tc.getArguments());
+    }
+
+    @Test
+    void probeStreamCallback_contentBeforeToolCallBecomesThinking() {
+        AtomicReference<String> receivedContent = new AtomicReference<>("");
+        AtomicReference<String> thinkingContent = new AtomicReference<>("");
+        AtomicReference<Boolean> onCompleteCalled = new AtomicReference<>(false);
+
+        StreamCallback downstream = new StreamCallback() {
+            @Override
+            public void onContent(String content) {
+                receivedContent.updateAndGet(s -> s + content);
+            }
+
+            @Override
+            public void onThinking(String content) {
+                thinkingContent.updateAndGet(s -> s + content);
+            }
+
+            @Override
+            public void onComplete() {
+                onCompleteCalled.set(true);
+            }
+
+            @Override
+            public void onError(Throwable error) {
+                fail("Unexpected error");
+            }
+        };
+
+        ProbeStreamCallback probe = new ProbeStreamCallback(downstream);
+        probe.onContent("我先查询知识库。");
+        probe.onToolCallDelta(0, "call_1", "searchKnowledge", "");
+        probe.onToolCallDelta(0, null, null, "{\"query\":\"退票\"}");
+        probe.onComplete();
+
+        assertEquals(ProbeStreamCallback.StreamMode.TOOL_CALL, probe.getMode());
+        assertEquals("", receivedContent.get());
+        assertEquals("我先查询知识库。", thinkingContent.get());
+        assertFalse(onCompleteCalled.get(), "onComplete should NOT be called in TOOL_CALL mode");
+
+        ChatResponse resp = probe.toChatResponse();
+        assertTrue(resp.hasToolCalls());
+        assertEquals("我先查询知识库。", resp.getContent());
+        assertEquals("searchKnowledge", resp.getToolCalls().get(0).getName());
     }
 
     @Test

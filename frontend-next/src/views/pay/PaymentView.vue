@@ -78,4 +78,26 @@ async function confirmPay() {
   align-items: center;
   margin: 22px 0;
 }
+
+@media (max-width: 760px) {
+  .pay-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .pay-actions :deep(.el-radio-group) {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
+  }
+
+  .pay-actions :deep(.el-radio-button__inner) {
+    width: 100%;
+  }
+
+  .pay-actions .el-button {
+    width: 100%;
+  }
+}
 </style>

@@ -154,7 +154,7 @@ function goPay() {
           <el-button @click="router.push({ name: 'orders' })">查看订单</el-button>
         </template>
       </el-result>
-      <el-table :data="purchaseResult">
+      <el-table class="desktop-result-table" :data="purchaseResult">
         <el-table-column prop="realName" label="乘车人" />
         <el-table-column prop="carriageNumber" label="车厢" />
         <el-table-column prop="seatNumber" label="座位" />
@@ -162,6 +162,13 @@ function goPay() {
           <template #default="{ row }">¥{{ (row.amount / 100).toFixed(2) }}</template>
         </el-table-column>
       </el-table>
+      <div class="mobile-result-list">
+        <div v-for="item in purchaseResult" :key="`${item.realName}_${item.carriageNumber}_${item.seatNumber}`">
+          <span>{{ item.realName }}</span>
+          <strong>{{ item.carriageNumber }}车 {{ item.seatNumber }}</strong>
+          <em>¥{{ (item.amount / 100).toFixed(2) }}</em>
+        </div>
+      </div>
     </el-card>
   </section>
 </template>
@@ -183,9 +190,69 @@ function goPay() {
   margin-bottom: 0;
 }
 
+.mobile-result-list {
+  display: none;
+}
+
 @media (max-width: 980px) {
   .purchase-form {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .purchase-page {
+    gap: 12px;
+  }
+
+  .purchase-form .el-button {
+    width: 100%;
+  }
+
+  .purchase-page :deep(.el-result__extra) {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .purchase-page :deep(.el-result__extra .el-button) {
+    width: 100%;
+  }
+
+  .desktop-result-table {
+    display: none;
+  }
+
+  .mobile-result-list {
+    display: grid;
+    gap: 8px;
+  }
+
+  .mobile-result-list div {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px 12px;
+    padding: 10px;
+    border: 1px solid #dbe3ec;
+    border-radius: 8px;
+  }
+
+  .mobile-result-list span {
+    color: #64748b;
+  }
+
+  .mobile-result-list strong {
+    color: #123c69;
+    font-weight: 700;
+  }
+
+  .mobile-result-list em {
+    grid-row: 1 / span 2;
+    grid-column: 2;
+    align-self: center;
+    color: #111827;
+    font-style: normal;
+    font-weight: 700;
   }
 }
 </style>

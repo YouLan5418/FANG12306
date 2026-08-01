@@ -26,4 +26,6 @@ public class EmbeddingProperties {
 
     /** 单次 API 调用最大文本数，超出自动拆分 */
     private int batchSize = 20;
+
+    private int maxConcurrent = 4;
 }

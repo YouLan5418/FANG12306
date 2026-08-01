@@ -9,9 +9,10 @@ import java.util.Map;
  * FC 引擎首包分流回调。
  *
  * 在 OpenAI 兼容流式中，delta.tool_calls 和 delta.content 在每个 chunk 中互斥出现。
- * 首个携带其中之一的 chunk 即可确定响应路径：
- * - CONTENT：将 content 推送给下游（用户看到回复）
- * - TOOL_CALL：抑制 content（FC 引擎将执行工具并循环）
+ * 有些模型会在同一轮中先输出说明文本，再输出 tool_calls。
+ * 因此 content 会先缓冲：
+ * - 最终没有工具调用：完成时将 content 推送给下游（用户看到回复）
+ * - 出现工具调用：已缓冲/后续 content 作为 thinking 推送，FC 引擎执行工具并循环
  *
  * 这消除了「先同步 chat 判断 tool_calls，再 streamChat 输出」的双倍调用。
  */
@@ -36,13 +37,9 @@ public class ProbeStreamCallback implements StreamCallback {
     @Override
     public void onContent(String content) {
         collectedContent.append(content);
-        if (mode == StreamMode.UNDECIDED) {
-            mode = StreamMode.CONTENT;
+        if (mode == StreamMode.TOOL_CALL) {
+            downstream.onThinking(content);
         }
-        if (mode == StreamMode.CONTENT) {
-            downstream.onContent(content);
-        }
-        // TOOL_CALL 模式：抑制 content
     }
 
     /**
@@ -52,6 +49,9 @@ public class ProbeStreamCallback implements StreamCallback {
     public void onToolCallDelta(int index, String id, String name, String argumentsDelta) {
         if (mode == StreamMode.UNDECIDED) {
             mode = StreamMode.TOOL_CALL;
+            if (!collectedContent.isEmpty()) {
+                downstream.onThinking(collectedContent.toString());
+            }
         }
         ToolCallAssembler assembler = toolCallAssemblers.computeIfAbsent(index, k -> new ToolCallAssembler());
         if (id != null) {
@@ -68,6 +68,10 @@ public class ProbeStreamCallback implements StreamCallback {
     @Override
     public void onComplete() {
         if (mode != StreamMode.TOOL_CALL) {
+            mode = StreamMode.CONTENT;
+            if (!collectedContent.isEmpty()) {
+                downstream.onContent(collectedContent.toString());
+            }
             downstream.onComplete();
         }
         // TOOL_CALL 模式：不调 onComplete，FC 引擎会循环并产生最终回复

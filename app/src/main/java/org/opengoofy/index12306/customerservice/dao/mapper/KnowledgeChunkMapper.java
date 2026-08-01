@@ -26,7 +26,7 @@ public interface KnowledgeChunkMapper extends BaseMapper<KnowledgeChunkDO> {
     @Select("SELECT id, category_id, document_id, chunk_index, content, metadata, " +
             "1 - (embedding <=> CAST(#{queryVec} AS vector)) AS score " +
             "FROM knowledge_chunk " +
-            "WHERE (#{categoryId} IS NULL OR category_id = #{categoryId}) " +
+            "WHERE (CAST(#{categoryId} AS BIGINT) IS NULL OR category_id = CAST(#{categoryId} AS BIGINT)) " +
             "ORDER BY embedding <=> CAST(#{queryVec} AS vector) " +
             "LIMIT #{topK}")
     List<ChunkSearchResult> vectorSearch(@Param("queryVec") String queryVec,
@@ -43,11 +43,23 @@ public interface KnowledgeChunkMapper extends BaseMapper<KnowledgeChunkDO> {
      */
     @Select("SELECT id, category_id, document_id, chunk_index, content, metadata " +
             "FROM knowledge_chunk " +
-            "WHERE (#{categoryId} IS NULL OR category_id = #{categoryId}) " +
+            "WHERE (CAST(#{categoryId} AS BIGINT) IS NULL OR category_id = CAST(#{categoryId} AS BIGINT)) " +
             "AND content ILIKE CONCAT('%', #{query}, '%') " +
             "ORDER BY id " +
             "LIMIT #{topK}")
     List<ChunkSearchResult> keywordSearch(@Param("query") String query,
                                           @Param("categoryId") Long categoryId,
                                           @Param("topK") int topK);
+
+    /**
+     * 查询命中切片的上下文窗口，用于 RAG 检索后的邻居扩展。
+     */
+    @Select("SELECT id, category_id, document_id, chunk_index, content, metadata " +
+            "FROM knowledge_chunk " +
+            "WHERE document_id = #{documentId} " +
+            "AND chunk_index BETWEEN #{startIndex} AND #{endIndex} " +
+            "ORDER BY chunk_index")
+    List<ChunkSearchResult> selectContextWindow(@Param("documentId") Long documentId,
+                                                @Param("startIndex") int startIndex,
+                                                @Param("endIndex") int endIndex);
 }

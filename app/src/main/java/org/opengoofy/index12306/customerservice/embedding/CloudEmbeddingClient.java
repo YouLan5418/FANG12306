@@ -14,6 +14,8 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Semaphore;
+import java.util.function.Supplier;
 
 /**
  * 云端 Embedding 客户端，调用 OpenAI 兼容 /embeddings 端点。
@@ -27,6 +29,7 @@ public class CloudEmbeddingClient implements EmbeddingClient {
     private final EmbeddingProperties properties;
     private final org.opengoofy.index12306.customerservice.chat.ModelHealthStore modelHealthStore;
     private final HttpClient httpClient;
+    private final Semaphore semaphore;
 
     public CloudEmbeddingClient(
             EmbeddingProperties properties,
@@ -36,10 +39,15 @@ public class CloudEmbeddingClient implements EmbeddingClient {
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofMillis(properties.getTimeoutMs()))
                 .build();
+        this.semaphore = new Semaphore(Math.max(1, properties.getMaxConcurrent()));
     }
 
     @Override
     public float[] embed(String text) {
+        return withPermit(() -> doEmbed(text));
+    }
+
+    private float[] doEmbed(String text) {
         if (!modelHealthStore.allowCall(properties.getModel())) {
             throw new RuntimeException("Embedding 服务不可用（断路器开启）");
         }
@@ -86,6 +94,10 @@ public class CloudEmbeddingClient implements EmbeddingClient {
     }
 
     private List<float[]> doBatchEmbed(List<String> texts) {
+        return withPermit(() -> doBatchEmbedWithPermit(texts));
+    }
+
+    private List<float[]> doBatchEmbedWithPermit(List<String> texts) {
         if (!modelHealthStore.allowCall(properties.getModel())) {
             throw new RuntimeException("Embedding 服务不可用（断路器开启）");
         }
@@ -109,6 +121,17 @@ public class CloudEmbeddingClient implements EmbeddingClient {
         } catch (Exception e) {
             modelHealthStore.markFailure(properties.getModel());
             throw new RuntimeException("批量 Embedding 失败", e);
+        }
+    }
+
+    private <T> T withPermit(Supplier<T> supplier) {
+        if (!semaphore.tryAcquire()) {
+            throw new RuntimeException("Embedding 服务繁忙，请稍后再试");
+        }
+        try {
+            return supplier.get();
+        } finally {
+            semaphore.release();
         }
     }
 

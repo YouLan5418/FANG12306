@@ -135,4 +135,34 @@ onMounted(loadOrder)
 .amount-alert {
   margin: 18px 0;
 }
+
+@media (max-width: 760px) {
+  .refund-page {
+    gap: 12px;
+  }
+
+  .refund-page :deep(.el-radio-group) {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
+  }
+
+  .refund-page :deep(.el-radio-button__inner) {
+    width: 100%;
+  }
+
+  .seat-list {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .seat-list :deep(.el-checkbox) {
+    width: 100%;
+    margin-right: 0;
+  }
+
+  .refund-page .el-button {
+    width: 100%;
+  }
+}
 </style>

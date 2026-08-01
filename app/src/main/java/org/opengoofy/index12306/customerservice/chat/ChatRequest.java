@@ -27,4 +27,6 @@ public class ChatRequest {
     private Double temperature;
 
     private Integer maxTokens;
+
+    private String userId;
 }

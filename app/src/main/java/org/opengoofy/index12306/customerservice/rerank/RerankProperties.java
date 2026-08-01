@@ -12,6 +12,8 @@ import org.springframework.context.annotation.Configuration;
 @ConfigurationProperties(prefix = "ai.rerank")
 public class RerankProperties {
 
+    private boolean enabled = true;
+
     private String baseUrl = "https://api.example.com/v1";
 
     private String apiKey = "sk-xxx";

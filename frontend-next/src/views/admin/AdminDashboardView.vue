@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from "vue"
 import { ElMessage, ElMessageBox } from "element-plus"
-import { Plus, Refresh, Search, View } from "@element-plus/icons-vue"
+import type { UploadFile } from "element-plus"
+import { Edit, Plus, Refresh, Search, View } from "@element-plus/icons-vue"
 import * as echarts from "echarts/core"
 import { BarChart, LineChart, PieChart } from "echarts/charts"
 import { GridComponent, LegendComponent, TooltipComponent } from "echarts/components"
@@ -22,6 +23,18 @@ import {
   publishTrain,
   toggleAdminUserStatus
 } from "@/api/admin"
+import {
+  createKbCategory,
+  deleteKbDocument,
+  listIngestionTasks,
+  listKbCategories,
+  listKbDocuments,
+  listKnowledgeChunks,
+  retryIngestionTask,
+  searchKnowledgeTest,
+  updateKnowledgeChunk,
+  uploadKbDocument
+} from "@/api/customer"
 import { listStations } from "@/api/ticket"
 import type {
   AdminDashboard,
@@ -33,6 +46,7 @@ import type {
   OperationTask,
   TrainPublishReq
 } from "@/types/admin"
+import type { IngestionTask, KbCategory, KbDocument, KnowledgeChunk, KnowledgeSearchResult } from "@/types/customer"
 import type { StationOption } from "@/types/ticket"
 
 const activeTab = ref("dashboard")
@@ -42,6 +56,10 @@ const opsLoading = ref(false)
 const publishLoading = ref(false)
 const detailLoading = ref(false)
 const stationLoading = ref(false)
+const kbLoading = ref(false)
+const kbUploading = ref(false)
+const chunkEditLoading = ref(false)
+const kbSearchLoading = ref(false)
 
 const dashboard = ref<AdminDashboard>({})
 const orderTrend = ref<AdminTrend>({ labels: [], values: [] })
@@ -51,6 +69,11 @@ const users = ref<AdminUser[]>([])
 const orders = ref<AdminOrder[]>([])
 const trains = ref<AdminTrain[]>([])
 const stations = ref<StationOption[]>([])
+const kbCategories = ref<KbCategory[]>([])
+const kbDocuments = ref<KbDocument[]>([])
+const kbChunks = ref<KnowledgeChunk[]>([])
+const kbSearchResults = ref<KnowledgeSearchResult[]>([])
+const ingestionTasks = ref<IngestionTask[]>([])
 const latestOperation = ref<OperationTask | null>(null)
 const trainDetail = ref<AdminTrainDetail | null>(null)
 
@@ -61,6 +84,8 @@ type EChartsInstance = echarts.ECharts
 let orderChart: EChartsInstance | null = null
 let revenueChart: EChartsInstance | null = null
 let statusChart: EChartsInstance | null = null
+let kbPollTimer: ReturnType<typeof window.setInterval> | null = null
+const knownTaskStatus = new Map<number, number>()
 
 echarts.use([
   LineChart,
@@ -81,9 +106,29 @@ const orderQuery = reactive({
   status: undefined as number | undefined
 })
 const trainQuery = reactive({ page: 1, size: 10, total: 0, keyword: "" })
+const kbFilter = reactive({ categoryId: undefined as number | undefined })
+const chunkQuery = reactive({
+  documentId: undefined as number | undefined,
+  categoryId: undefined as number | undefined,
+  keyword: ""
+})
+const kbCategoryForm = reactive({ name: "", description: "" })
+const kbUploadForm = reactive({
+  categoryId: undefined as number | undefined,
+  parserType: "",
+  chunkMode: "structure_aware"
+})
+const kbSearchForm = reactive({
+  query: "",
+  categoryId: undefined as number | undefined,
+  topK: 5
+})
+const chunkEditForm = reactive({ id: 0, content: "" })
+const selectedKbFile = ref<File | null>(null)
 
 const publishDrawer = ref(false)
 const detailDrawer = ref(false)
+const chunkEditDrawer = ref(false)
 const publishStep = ref(0)
 const publishForm = reactive({
   trainNumber: "",
@@ -140,6 +185,22 @@ const carriageTypeText: Record<number, string> = {
   4: "卧铺车厢"
 }
 
+const kbStatusText: Record<number, string> = {
+  0: "待处理",
+  1: "处理中",
+  2: "完成",
+  3: "失败"
+}
+
+const taskStatusText: Record<number, string> = {
+  0: "待处理",
+  1: "解析中",
+  2: "切片中",
+  3: "向量化中",
+  4: "完成",
+  5: "失败"
+}
+
 const groupedStations = computed(() => {
   const groups = new Map<string, StationOption[]>()
   stations.value.forEach((station) => {
@@ -153,6 +214,10 @@ const groupedStations = computed(() => {
     options: options.sort((left, right) => left.name.localeCompare(right.name, "zh-CN"))
   }))
 })
+
+const hasRunningIngestionTask = computed(() =>
+  ingestionTasks.value.some((task) => task.status !== undefined && task.status >= 0 && task.status < 4)
+)
 
 async function renderCharts() {
   if (!orderChartRef.value || !revenueChartRef.value || !statusChartRef.value) return
@@ -247,6 +312,187 @@ async function loadTrains() {
     trainQuery.total = page.total || 0
   } finally {
     tableLoading.value = false
+  }
+}
+
+async function loadKnowledgeBase(silent = false) {
+  if (!silent) {
+    kbLoading.value = true
+  }
+  try {
+    const [categories, documents, tasks, chunks] = await Promise.all([
+      listKbCategories(),
+      listKbDocuments(kbFilter.categoryId),
+      listIngestionTasks(),
+      listKnowledgeChunks({
+        documentId: chunkQuery.documentId,
+        categoryId: chunkQuery.categoryId,
+        keyword: chunkQuery.keyword.trim() || undefined
+      })
+    ])
+    notifyTaskStatusChanges(tasks || [])
+    kbCategories.value = categories || []
+    kbDocuments.value = documents || []
+    ingestionTasks.value = tasks || []
+    kbChunks.value = chunks || []
+    if (!kbUploadForm.categoryId && kbCategories.value.length) {
+      kbUploadForm.categoryId = kbCategories.value[0].id
+    }
+    syncKnowledgePolling()
+  } finally {
+    if (!silent) {
+      kbLoading.value = false
+    }
+  }
+}
+
+function notifyTaskStatusChanges(tasks: IngestionTask[]) {
+  tasks.forEach((task) => {
+    const previousStatus = knownTaskStatus.get(task.id)
+    const currentStatus = task.status ?? -1
+    if (previousStatus !== undefined && previousStatus !== currentStatus) {
+      if (currentStatus === 4) {
+        ElMessage.success(`文档 ${task.documentId} 入库完成`)
+      } else if (currentStatus === 5) {
+        ElMessage.error(`文档 ${task.documentId} 入库失败`)
+      }
+    }
+    knownTaskStatus.set(task.id, currentStatus)
+  })
+}
+
+function startKnowledgePolling() {
+  if (kbPollTimer) return
+  kbPollTimer = window.setInterval(() => {
+    if (activeTab.value === "knowledge") {
+      loadKnowledgeBase(true)
+    }
+  }, 2500)
+}
+
+function stopKnowledgePolling() {
+  if (!kbPollTimer) return
+  window.clearInterval(kbPollTimer)
+  kbPollTimer = null
+}
+
+function syncKnowledgePolling() {
+  if (activeTab.value === "knowledge" && hasRunningIngestionTask.value) {
+    startKnowledgePolling()
+  } else {
+    stopKnowledgePolling()
+  }
+}
+
+async function createKnowledgeCategory() {
+  if (!kbCategoryForm.name.trim()) {
+    ElMessage.warning("请填写分类名称")
+    return
+  }
+  await createKbCategory({
+    name: kbCategoryForm.name.trim(),
+    description: kbCategoryForm.description.trim()
+  })
+  kbCategoryForm.name = ""
+  kbCategoryForm.description = ""
+  ElMessage.success("分类已创建")
+  await loadKnowledgeBase()
+}
+
+function onKbFileChange(uploadFile: UploadFile) {
+  selectedKbFile.value = uploadFile.raw || null
+}
+
+async function submitKnowledgeUpload() {
+  if (!kbUploadForm.categoryId) {
+    ElMessage.warning("请选择知识库分类")
+    return
+  }
+  if (!selectedKbFile.value) {
+    ElMessage.warning("请选择要上传的文档")
+    return
+  }
+  kbUploading.value = true
+  try {
+    const result = await uploadKbDocument({
+      file: selectedKbFile.value,
+      categoryId: kbUploadForm.categoryId,
+      parserType: kbUploadForm.parserType,
+      chunkMode: kbUploadForm.chunkMode
+    })
+    ElMessage.success(`文档已上传，入库任务 ${result.taskId}`)
+    selectedKbFile.value = null
+    await loadKnowledgeBase()
+    startKnowledgePolling()
+  } finally {
+    kbUploading.value = false
+  }
+}
+
+async function removeKbDocument(row: KbDocument) {
+  await ElMessageBox.confirm(`确定删除文档 ${row.fileName} 吗？`, "删除文档", { type: "warning" })
+  await deleteKbDocument(row.id)
+  ElMessage.success("文档已删除")
+  await loadKnowledgeBase()
+}
+
+async function retryKbTask(row: IngestionTask) {
+  await retryIngestionTask(row.id)
+  ElMessage.success("已重新触发入库任务")
+  await loadKnowledgeBase()
+  startKnowledgePolling()
+}
+
+async function loadKnowledgeChunks() {
+  kbLoading.value = true
+  try {
+    kbChunks.value = await listKnowledgeChunks({
+      documentId: chunkQuery.documentId,
+      categoryId: chunkQuery.categoryId,
+      keyword: chunkQuery.keyword.trim() || undefined
+    })
+  } finally {
+    kbLoading.value = false
+  }
+}
+
+async function runKnowledgeSearch() {
+  const query = kbSearchForm.query.trim()
+  if (!query) {
+    ElMessage.warning("请输入检索问题")
+    return
+  }
+  kbSearchLoading.value = true
+  try {
+    kbSearchResults.value = await searchKnowledgeTest({
+      query,
+      categoryId: kbSearchForm.categoryId,
+      topK: kbSearchForm.topK
+    })
+  } finally {
+    kbSearchLoading.value = false
+  }
+}
+
+function openChunkEdit(row: KnowledgeChunk) {
+  chunkEditForm.id = row.id
+  chunkEditForm.content = row.content
+  chunkEditDrawer.value = true
+}
+
+async function submitChunkEdit() {
+  if (!chunkEditForm.content.trim()) {
+    ElMessage.warning("切片内容不能为空")
+    return
+  }
+  chunkEditLoading.value = true
+  try {
+    await updateKnowledgeChunk(chunkEditForm.id, chunkEditForm.content.trim())
+    ElMessage.success("切片已更新并重新生成向量")
+    chunkEditDrawer.value = false
+    await loadKnowledgeChunks()
+  } finally {
+    chunkEditLoading.value = false
   }
 }
 
@@ -391,6 +637,9 @@ async function runOperation(type: "timeout" | "calibrate" | "compensate") {
 }
 
 function onTabChange(name: string | number) {
+  if (name !== "knowledge") {
+    stopKnowledgePolling()
+  }
   if (name === "dashboard") {
     loadDashboard()
   } else if (name === "users") {
@@ -399,6 +648,8 @@ function onTabChange(name: string | number) {
     loadOrders()
   } else if (name === "trains") {
     loadTrains()
+  } else if (name === "knowledge") {
+    loadKnowledgeBase()
   }
 }
 
@@ -408,6 +659,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  stopKnowledgePolling()
   window.removeEventListener("resize", resizeCharts)
   orderChart?.dispose()
   revenueChart?.dispose()
@@ -536,6 +788,202 @@ onBeforeUnmount(() => {
         </el-card>
       </el-tab-pane>
 
+      <el-tab-pane label="知识库" name="knowledge">
+        <div v-loading="kbLoading" class="kb-stack">
+          <el-card shadow="never">
+            <template #header>知识库分类</template>
+            <div class="kb-category-grid">
+              <el-input v-model="kbCategoryForm.name" placeholder="分类名称，例如 退票规则" />
+              <el-input v-model="kbCategoryForm.description" placeholder="分类说明" />
+              <el-button :icon="Plus" type="primary" @click="createKnowledgeCategory">创建分类</el-button>
+            </div>
+            <div class="kb-categories">
+              <el-tag v-for="category in kbCategories" :key="category.id" effect="plain">
+                {{ category.name }} · {{ category.documentCount || 0 }} 篇
+              </el-tag>
+            </div>
+          </el-card>
+
+          <el-card shadow="never">
+            <template #header>上传文档并触发向量入库</template>
+            <div class="kb-upload-grid">
+              <el-select v-model="kbUploadForm.categoryId" placeholder="选择分类">
+                <el-option
+                  v-for="category in kbCategories"
+                  :key="category.id"
+                  :label="category.name"
+                  :value="category.id"
+                />
+              </el-select>
+              <el-select v-model="kbUploadForm.parserType" placeholder="解析器">
+                <el-option label="自动识别" value="" />
+                <el-option label="Markdown" value="MARKDOWN" />
+                <el-option label="Tika" value="TIKA" />
+                <el-option label="OCR" value="OCR" />
+              </el-select>
+              <el-select v-model="kbUploadForm.chunkMode" placeholder="切片方式">
+                <el-option label="结构切片" value="structure_aware" />
+                <el-option label="固定长度" value="fixed_size" />
+              </el-select>
+              <el-upload
+                :auto-upload="false"
+                :limit="1"
+                :on-change="onKbFileChange"
+                :show-file-list="true"
+                accept=".md,.txt,.pdf,.docx"
+                action="#"
+              >
+                <el-button>选择文档</el-button>
+              </el-upload>
+              <el-button :loading="kbUploading" type="success" @click="submitKnowledgeUpload">
+                上传并入库
+              </el-button>
+            </div>
+          </el-card>
+
+          <el-card shadow="never">
+            <template #header>文档列表</template>
+            <div class="toolbar two-columns">
+              <el-select v-model="kbFilter.categoryId" clearable placeholder="按分类筛选">
+                <el-option
+                  v-for="category in kbCategories"
+                  :key="category.id"
+                  :label="category.name"
+                  :value="category.id"
+                />
+              </el-select>
+              <el-button :icon="Refresh" :loading="kbLoading" type="primary" @click="loadKnowledgeBase">刷新</el-button>
+            </div>
+            <el-table :data="kbDocuments" empty-text="暂无知识库文档">
+              <el-table-column prop="fileName" label="文件名" min-width="180" />
+              <el-table-column prop="fileType" label="类型" width="100" />
+              <el-table-column prop="parserType" label="解析器" width="110" />
+              <el-table-column prop="chunkMode" label="切片" width="110" />
+              <el-table-column label="状态" width="110">
+                <template #default="{ row }">
+                  <el-tag :type="row.status === 2 ? 'success' : row.status === 3 ? 'danger' : 'warning'">
+                    {{ kbStatusText[row.status] || row.status }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="chunkCount" label="切片数" width="90" />
+              <el-table-column label="操作" width="110" fixed="right">
+                <template #default="{ row }">
+                  <el-button type="danger" link @click="removeKbDocument(row)">删除</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-card>
+
+          <el-card shadow="never">
+            <template #header>知识库检索测试</template>
+            <div class="toolbar kb-search-toolbar">
+              <el-input
+                v-model="kbSearchForm.query"
+                clearable
+                placeholder="输入用户问题，查看 RAG 召回片段"
+                @keyup.enter="runKnowledgeSearch"
+              />
+              <el-select v-model="kbSearchForm.categoryId" clearable placeholder="按分类检索">
+                <el-option
+                  v-for="category in kbCategories"
+                  :key="category.id"
+                  :label="category.name"
+                  :value="category.id"
+                />
+              </el-select>
+              <el-input-number v-model="kbSearchForm.topK" :min="1" :max="20" controls-position="right" />
+              <el-button :icon="Search" :loading="kbSearchLoading" type="primary" @click="runKnowledgeSearch">
+                检索
+              </el-button>
+            </div>
+            <div v-if="kbSearchResults.length" class="kb-search-results">
+              <article v-for="item in kbSearchResults" :key="item.chunkId" class="kb-search-result">
+                <div class="kb-search-meta">
+                  <el-tag effect="plain">score {{ Number(item.score || 0).toFixed(4) }}</el-tag>
+                  <span>文档 {{ item.documentId }} · 切片 {{ item.chunkIndex }}</span>
+                  <span v-if="item.source">{{ item.source }}</span>
+                </div>
+                <p>{{ item.content }}</p>
+              </article>
+            </div>
+            <el-empty v-else description="输入问题后可查看召回片段、score 和来源" />
+          </el-card>
+
+          <el-card shadow="never">
+            <template #header>已入库知识切片</template>
+            <div class="toolbar chunk-toolbar">
+              <el-select v-model="chunkQuery.categoryId" clearable placeholder="按分类筛选">
+                <el-option
+                  v-for="category in kbCategories"
+                  :key="category.id"
+                  :label="category.name"
+                  :value="category.id"
+                />
+              </el-select>
+              <el-input-number
+                v-model="chunkQuery.documentId"
+                :min="1"
+                controls-position="right"
+                placeholder="文档 ID"
+              />
+              <el-input v-model="chunkQuery.keyword" clearable placeholder="按内容关键词查询" />
+              <el-button :icon="Search" :loading="kbLoading" type="primary" @click="loadKnowledgeChunks">
+                查询
+              </el-button>
+            </div>
+            <el-table :data="kbChunks" empty-text="暂无知识切片">
+              <el-table-column prop="documentId" label="文档 ID" width="100" />
+              <el-table-column prop="chunkIndex" label="序号" width="80" />
+              <el-table-column prop="embeddingDimension" label="向量维度" width="100" />
+              <el-table-column prop="createTime" label="创建时间" min-width="160" />
+              <el-table-column label="内容" min-width="360" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <span class="chunk-preview">{{ row.content }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="100" fixed="right">
+                <template #default="{ row }">
+                  <el-button :icon="Edit" type="primary" link @click="openChunkEdit(row)">编辑</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-card>
+
+          <el-card shadow="never">
+            <template #header>
+              <div class="card-header-line">
+                <span>入库任务</span>
+                <el-tag v-if="hasRunningIngestionTask" type="warning" effect="plain">自动刷新中</el-tag>
+              </div>
+            </template>
+            <el-table :data="ingestionTasks" empty-text="暂无入库任务">
+              <el-table-column prop="id" label="任务 ID" width="110" />
+              <el-table-column prop="documentId" label="文档 ID" width="110" />
+              <el-table-column label="状态" width="110">
+                <template #default="{ row }">
+                  <el-tag :type="row.status === 4 ? 'success' : row.status === 5 ? 'danger' : 'warning'">
+                    {{ taskStatusText[row.status] || row.status }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="切片" width="120">
+                <template #default="{ row }">
+                  {{ row.processedChunks || 0 }} / {{ row.totalChunks || 0 }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="errorMsg" label="错误信息" min-width="220" show-overflow-tooltip />
+              <el-table-column prop="updateTime" label="更新时间" min-width="160" />
+              <el-table-column label="操作" width="110" fixed="right">
+                <template #default="{ row }">
+                  <el-button v-if="row.status === 5" type="primary" link @click="retryKbTask(row)">重试</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-card>
+        </div>
+      </el-tab-pane>
+
       <el-tab-pane label="运营兜底" name="ops">
         <el-card shadow="never">
           <div class="ops-actions">
@@ -558,6 +1006,27 @@ onBeforeUnmount(() => {
         </el-card>
       </el-tab-pane>
     </el-tabs>
+
+    <el-drawer v-model="chunkEditDrawer" title="编辑知识切片" size="640px" class="admin-drawer">
+      <el-form label-position="top">
+        <el-form-item label="切片 ID">
+          <el-input :model-value="chunkEditForm.id" disabled />
+        </el-form-item>
+        <el-form-item label="内容">
+          <el-input
+            v-model="chunkEditForm.content"
+            :autosize="{ minRows: 12, maxRows: 22 }"
+            maxlength="12000"
+            show-word-limit
+            type="textarea"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="chunkEditDrawer = false">取消</el-button>
+        <el-button :loading="chunkEditLoading" type="primary" @click="submitChunkEdit">保存并重建向量</el-button>
+      </template>
+    </el-drawer>
 
     <el-drawer v-model="publishDrawer" title="发布车次" size="720px" class="admin-drawer">
       <el-steps :active="publishStep" finish-status="success" simple>
@@ -755,6 +1224,60 @@ onBeforeUnmount(() => {
   grid-template-columns: minmax(220px, 1fr) auto;
 }
 
+.card-header-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.toolbar.chunk-toolbar {
+  grid-template-columns: minmax(160px, 0.8fr) 140px minmax(220px, 1fr) auto;
+}
+
+.toolbar.kb-search-toolbar {
+  grid-template-columns: minmax(240px, 1fr) minmax(160px, 0.5fr) 120px auto;
+}
+
+.kb-search-results {
+  display: grid;
+  gap: 10px;
+}
+
+.kb-search-result {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 12px;
+}
+
+.kb-search-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.kb-search-result p {
+  max-height: 220px;
+  margin: 0;
+  overflow: auto;
+  color: #334155;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.chunk-preview {
+  display: block;
+  overflow: hidden;
+  color: #334155;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .ops-actions {
   display: flex;
   flex-wrap: wrap;
@@ -764,6 +1287,33 @@ onBeforeUnmount(() => {
 
 .ops-result {
   margin-top: 12px;
+}
+
+.kb-stack {
+  display: grid;
+  gap: 16px;
+}
+
+.kb-category-grid,
+.kb-upload-grid {
+  display: grid;
+  gap: 12px;
+  align-items: center;
+}
+
+.kb-category-grid {
+  grid-template-columns: minmax(180px, 0.8fr) minmax(220px, 1fr) auto;
+}
+
+.kb-upload-grid {
+  grid-template-columns: minmax(160px, 1fr) 130px 130px auto auto;
+}
+
+.kb-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
 }
 
 .drawer-section {
@@ -806,10 +1356,14 @@ h3 {
 
 @media (max-width: 980px) {
   .metric-grid,
-  .chart-grid,
-  .toolbar,
-  .toolbar.two-columns,
-  .station-row,
+    .chart-grid,
+    .toolbar,
+    .toolbar.two-columns,
+    .toolbar.chunk-toolbar,
+    .toolbar.kb-search-toolbar,
+    .kb-category-grid,
+    .kb-upload-grid,
+    .station-row,
   .price-row,
   .carriage-row {
     grid-template-columns: 1fr;
@@ -825,8 +1379,67 @@ h3 {
     padding: 12px;
   }
 
+  .admin-tabs :deep(.el-tabs__nav-wrap) {
+    overflow-x: auto;
+  }
+
+  .admin-tabs :deep(.el-tabs__nav-scroll) {
+    min-width: max-content;
+  }
+
+  .metric-grid,
+  .chart-grid {
+    gap: 12px;
+  }
+
+  .metric-grid strong {
+    font-size: 24px;
+  }
+
+  .toolbar .el-button,
+  .kb-category-grid .el-button,
+  .kb-upload-grid .el-button,
+  .ops-actions .el-button {
+    width: 100%;
+  }
+
+  .ops-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .section-title {
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .section-title .el-button {
+    flex: 0 0 auto;
+  }
+
   :deep(.admin-drawer) {
     width: 100% !important;
+  }
+
+  :deep(.admin-drawer .el-drawer__body) {
+    padding: 14px;
+  }
+
+  :deep(.admin-drawer .el-drawer__footer) {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  :deep(.admin-drawer .el-drawer__footer .el-button) {
+    width: 100%;
+  }
+
+  :deep(.el-date-editor.el-input),
+  :deep(.el-date-editor.el-input__wrapper),
+  :deep(.el-select),
+  :deep(.el-input-number) {
+    width: 100%;
   }
 }
 </style>

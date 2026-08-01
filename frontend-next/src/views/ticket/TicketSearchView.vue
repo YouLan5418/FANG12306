@@ -94,6 +94,11 @@ onMounted(loadStations)
               :label="group.regionName"
             >
               <el-option
+                :key="`${group.regionName}-all-departure`"
+                :label="`${group.regionName} 全部车站`"
+                :value="group.regionName"
+              />
+              <el-option
                 v-for="station in group.options"
                 :key="station.code || station.name"
                 :label="`${station.name} ${station.spell || ''} ${station.code || ''}`"
@@ -118,6 +123,11 @@ onMounted(loadStations)
               :key="group.regionName"
               :label="group.regionName"
             >
+              <el-option
+                :key="`${group.regionName}-all-arrival`"
+                :label="`${group.regionName} 全部车站`"
+                :value="group.regionName"
+              />
               <el-option
                 v-for="station in group.options"
                 :key="station.code || station.name"

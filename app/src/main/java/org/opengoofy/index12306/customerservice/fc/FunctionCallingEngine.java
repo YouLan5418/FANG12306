@@ -67,6 +67,7 @@ public class FunctionCallingEngine {
             ChatRequest request = ChatRequest.builder()
                     .messages(messages)
                     .tools(tools)
+                    .userId(sanitizeUserId(ctx.getUserId()))
                     .build();
             ChatResponse resp = chatClient.streamChatCollect(request, probe);
 
@@ -88,6 +89,14 @@ public class FunctionCallingEngine {
             }
         }
         callback.onError(new RuntimeException("超过最大工具调用轮数(" + maxIterations + ")"));
+    }
+
+    private String sanitizeUserId(String userId) {
+        if (userId == null || userId.isBlank()) {
+            return null;
+        }
+        String sanitized = ("u_" + userId).replaceAll("[^a-zA-Z0-9\\-_]", "_");
+        return sanitized.length() <= 512 ? sanitized : sanitized.substring(0, 512);
     }
 
     /**

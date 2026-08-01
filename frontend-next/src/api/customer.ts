@@ -4,7 +4,13 @@ import type {
   ChatHistoryMessage,
   ChatSession,
   CustomerChatReq,
-  CustomerSseEvent
+  CustomerSseEvent,
+  DocumentUploadResp,
+  IngestionTask,
+  KbCategory,
+  KbDocument,
+  KnowledgeChunk,
+  KnowledgeSearchResult
 } from "@/types/customer"
 
 interface StreamHandlers {
@@ -65,6 +71,83 @@ export function listCustomerMessages(sessionId: string) {
 
 export function deleteCustomerSession(sessionId: string) {
   return unwrap<void>(request.delete(`/customer-service/session/${sessionId}`))
+}
+
+export function listKbCategories() {
+  return unwrap<KbCategory[]>(request.get("/admin/kb/category"))
+}
+
+export function createKbCategory(data: { name: string; description?: string }) {
+  return unwrap<number>(request.post("/admin/kb/category", data))
+}
+
+export function updateKbCategory(id: number, data: { name: string; description?: string }) {
+  return unwrap<void>(request.put(`/admin/kb/category/${id}`, data))
+}
+
+export function deleteKbCategory(id: number) {
+  return unwrap<void>(request.delete(`/admin/kb/category/${id}`))
+}
+
+export function listKbDocuments(categoryId?: number) {
+  return unwrap<KbDocument[]>(
+    request.get("/admin/kb/document", { params: { categoryId } })
+  )
+}
+
+export function uploadKbDocument(data: {
+  file: File
+  categoryId: number
+  parserType?: string
+  chunkMode?: string
+}) {
+  const formData = new FormData()
+  formData.append("file", data.file)
+  formData.append("categoryId", String(data.categoryId))
+  if (data.parserType) {
+    formData.append("parserType", data.parserType)
+  }
+  if (data.chunkMode) {
+    formData.append("chunkMode", data.chunkMode)
+  }
+  return unwrap<DocumentUploadResp>(
+    request.post("/admin/kb/document/upload", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+      timeout: 120000
+    })
+  )
+}
+
+export function deleteKbDocument(id: number) {
+  return unwrap<void>(request.delete(`/admin/kb/document/${id}`))
+}
+
+export function listIngestionTasks() {
+  return unwrap<IngestionTask[]>(request.get("/admin/kb/task"))
+}
+
+export function retryIngestionTask(id: number) {
+  return unwrap<void>(request.post(`/admin/kb/task/${id}/retry`))
+}
+
+export function listKnowledgeChunks(params?: {
+  documentId?: number
+  categoryId?: number
+  keyword?: string
+}) {
+  return unwrap<KnowledgeChunk[]>(request.get("/admin/kb/chunk", { params }))
+}
+
+export function updateKnowledgeChunk(id: number, content: string) {
+  return unwrap<void>(request.put(`/admin/kb/chunk/${id}`, { content }))
+}
+
+export function searchKnowledgeTest(params: {
+  query: string
+  categoryId?: number
+  topK?: number
+}) {
+  return unwrap<KnowledgeSearchResult[]>(request.get("/admin/kb/search", { params }))
 }
 
 function parseSseLine(line: string, handlers: StreamHandlers) {

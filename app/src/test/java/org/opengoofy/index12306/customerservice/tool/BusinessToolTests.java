@@ -6,9 +6,11 @@ import com.alibaba.fastjson2.JSONObject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.opengoofy.index12306.customerservice.fc.ToolExecutionContext;
+import org.opengoofy.index12306.customerservice.chat.ChatProperties;
 import org.opengoofy.index12306.customerservice.rag.RagRetriever;
 import org.opengoofy.index12306.customerservice.rerank.RetrievedChunk;
 import org.opengoofy.index12306.customerservice.rerank.ScoredChunk;
+import org.opengoofy.index12306.framework.cache.DistributedCache;
 import org.opengoofy.index12306.order.dto.resp.TicketOrderDetailRespDTO;
 import org.opengoofy.index12306.order.service.OrderService;
 import org.opengoofy.index12306.ticket.dao.entity.StationDO;
@@ -163,7 +165,7 @@ class BusinessToolTests {
         when(ragRetriever.retrieve(anyString(), any(), anyInt()))
                 .thenReturn(List.of(new ScoredChunk(chunk, 0.95f)));
 
-        SearchKnowledgeTool tool = new SearchKnowledgeTool(ragRetriever);
+        SearchKnowledgeTool tool = new SearchKnowledgeTool(ragRetriever, mock(DistributedCache.class), new ChatProperties());
         String result = tool.execute(Map.of("query", "退票手续费"), ctx);
 
         JSONArray arr = JSON.parseArray(result);
@@ -177,9 +179,22 @@ class BusinessToolTests {
         when(ragRetriever.retrieve(anyString(), any(), anyInt()))
                 .thenReturn(List.of());
 
-        SearchKnowledgeTool tool = new SearchKnowledgeTool(ragRetriever);
+        SearchKnowledgeTool tool = new SearchKnowledgeTool(ragRetriever, mock(DistributedCache.class), new ChatProperties());
         String result = tool.execute(Map.of("query", "未知问题"), ctx);
 
         assertEquals("[]", result);
+    }
+
+    @Test
+    void searchKnowledge_cacheHitSkipsRetriever() {
+        RagRetriever ragRetriever = mock(RagRetriever.class);
+        DistributedCache distributedCache = mock(DistributedCache.class);
+        when(distributedCache.get(anyString(), eq(String.class))).thenReturn("[{\"content\":\"cached\"}]");
+
+        SearchKnowledgeTool tool = new SearchKnowledgeTool(ragRetriever, distributedCache, new ChatProperties());
+        String result = tool.execute(Map.of("query", "  退票   规则 "), ctx);
+
+        assertEquals("[{\"content\":\"cached\"}]", result);
+        verifyNoInteractions(ragRetriever);
     }
 }

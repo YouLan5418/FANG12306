@@ -2,6 +2,10 @@ server:
   port: 8080
 
 spring:
+  config:
+    import:
+      - optional:file:.env[.properties]
+      - optional:file:../.env[.properties]
   application:
     name: index12306-app
   profiles:
@@ -88,22 +92,35 @@ logging:
 # AI 客服
 ai:
   chat:
-    provider: ollama
-    base-url: http://localhost:11434/v1
-    api-key: ollama
-    model: qwen2.5:7b
+    provider: deepseek
+    base-url: https://api.deepseek.com
+    api-key: ${DEEPSEEK_API_KEY:}
+    model: deepseek-v4-flash
     temperature: 0.7
     timeout-ms: 60000
+    rate-limit-per-minute: 30
+    worker-core-size: 8
+    worker-max-size: 32
+    worker-queue-capacity: 128
+    global-max-concurrent: 32
+    user-max-concurrent: 1
+    rag-cache-ttl-seconds: 300
+    system-prompt-file: config/customer-service-system-prompt.md
   embedding:
-    base-url: https://api.example.com/v1
-    api-key: sk-xxx
-    model: bge-m3
+    base-url: http://localhost:11434/v1
+    api-key: ollama
+    model: qwen3-embedding:0.6b
     dimension: 1024
+    timeout-ms: 30000
+    batch-size: 20
+    max-concurrent: 4
   rerank:
-    base-url: https://api.example.com/v1
-    api-key: sk-xxx
-    model: gte-rerank
+    enabled: false
+    base-url: http://localhost:11434/v1
+    api-key: ollama
+    model: qwen3.5:4b
     top-n: 3
+    timeout-ms: 30000
 
 # 文件存储（RustFS / S3 兼容）
 file-storage:

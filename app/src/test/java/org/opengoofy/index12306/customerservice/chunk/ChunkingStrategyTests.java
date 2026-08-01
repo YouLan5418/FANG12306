@@ -138,6 +138,22 @@ class ChunkingStrategyTests {
     }
 
     @Test
+    void structureAware_addsHeadingPathContext() {
+        StructureAwareTextChunker chunker = new StructureAwareTextChunker(50, 500, 1000, 0);
+        String markdown = """
+                # 支付相关
+
+                ## 支付异常
+
+                扣款成功但订单仍显示待支付时，建议等待系统同步。
+                """;
+        List<String> chunks = chunker.chunk(markdown);
+
+        assertEquals(1, chunks.size());
+        assertTrue(chunks.get(0).contains("上下文：支付相关 > 支付异常"));
+    }
+
+    @Test
     void structureAware_emptyTextReturnsEmpty() {
         StructureAwareTextChunker chunker = new StructureAwareTextChunker();
         assertTrue(chunker.chunk("").isEmpty());

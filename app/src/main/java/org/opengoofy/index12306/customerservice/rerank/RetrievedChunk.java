@@ -20,6 +20,7 @@ public class RetrievedChunk {
     private Long categoryId;
     private Integer chunkIndex;
     private String content;
+    private String metadata;
 
     /** 来源通道的检索分数（余弦相似度或关键词相关度） */
     private float score;
