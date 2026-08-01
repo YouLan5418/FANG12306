@@ -53,7 +53,7 @@
 |----|------|------|----------|----------|------|
 | P0-T1 | 初始化 Maven 多模块工程（dependencies/framework/app/frontend/resources） | 无 | 全局工程结构 | `mvn clean compile` 通过；app 模块可启动空应用 | ✅ 完成 |
 | P0-T2 | 基础设施连接配置（PG/Redis/RocketMQ）+ docker-compose | P0-T1 | application.yml、docker-compose.yml | `docker-compose up` 起 PG/Redis/RocketMQ；应用健康检查 200 | ✅ 完成 |
-| P0-T3 | 执行建表脚本 + 种子数据 | P0-T2 | schema-postgresql.sql 落库 | psql `\dt` 显示 26 张表；kb_category 有 3 条种子；knowledge_chunk 有 hnsw 索引 | ✅ 完成 |
+| P0-T3 | 执行建表脚本 + 种子数据 | P0-T2 | `docs/database/schema-postgresql.sql` 落库 | psql `\dt` 显示 26 张表；kb_category 有 3 条种子；knowledge_chunk 有 hnsw 索引 | ✅ 完成 |
 | P0-T4 | 轻量 CI（GitHub Actions：编译+单元测试） | P0-T1 | .github/workflows | push 后 CI 跑通编译（测试可先 skip） | ⏸ 暂缓（用户要求不补） |
 
 ## Phase 1：framework 基础层
