@@ -1,0 +1,135 @@
+\documentclass[11pt,a4paper]{ctexart}
+
+\usepackage[margin=1.55cm]{geometry}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{fontawesome5}
+
+\definecolor{primary}{HTML}{123C69}
+\definecolor{textgray}{HTML}{475569}
+
+\hypersetup{
+  colorlinks=true,
+  urlcolor=primary,
+  linkcolor=primary
+}
+
+\pagestyle{empty}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{3pt}
+\setlist[itemize]{leftmargin=1.3em, itemsep=2pt, topsep=2pt}
+
+\titleformat{\section}
+  {\large\bfseries\color{primary}}
+  {}
+  {0em}
+  {}
+  [\titlerule]
+
+\titlespacing*{\section}{0pt}{8pt}{5pt}
+
+\newcommand{\resumeItem}[1]{\item #1}
+\newcommand{\resumeSubheading}[4]{
+  \textbf{#1} \hfill #2 \\
+  {\color{textgray}#3} \hfill {\color{textgray}#4}
+}
+\newcommand{\projectHeading}[3]{
+  \textbf{#1} \hfill #2 \\
+  {\color{textgray}技术栈：#3}
+}
+
+\begin{document}
+
+%====================
+% Header
+%====================
+
+\begin{center}
+  {\Huge \textbf{姓名}} \\[5pt]
+  Java 后端开发工程师 / 后端开发实习生 \\[5pt]
+  \faPhone\ 138-0000-0000 \quad
+  \faEnvelope\ yourname@example.com \quad
+  \faGithub\ \href{https://github.com/yourname}{github.com/yourname} \quad
+  \faMapMarker*\ 城市
+\end{center}
+
+%====================
+\section{教育经历}
+%====================
+
+\resumeSubheading
+  {学校名称}{2022.09 -- 2026.06}
+  {计算机科学与技术 / 软件工程，本科}{GPA：可选}
+
+\begin{itemize}
+  \resumeItem{主修课程：数据结构、操作系统、计算机网络、数据库系统、Java 程序设计、软件工程。}
+  \resumeItem{可选：奖学金、竞赛、实验室经历、核心课程成绩等。}
+\end{itemize}
+
+%====================
+\section{专业技能}
+%====================
+
+\begin{itemize}
+  \resumeItem{\textbf{Java 后端：}熟悉 Java、Spring Boot、Spring MVC、MyBatis-Plus，了解常见分层架构、统一异常、参数校验、拦截器和 JWT 登录态。}
+  \resumeItem{\textbf{中间件：}熟悉 Redis 缓存、Redisson 分布式锁、RocketMQ 消息队列，了解延迟消息、消费幂等、失败重试和最终一致性设计。}
+  \resumeItem{\textbf{数据库：}熟悉 PostgreSQL/MySQL、索引设计、事务、SQL 调优基础；了解 pgvector 向量检索和 HNSW 索引。}
+  \resumeItem{\textbf{AI 应用：}了解 OpenAI-compatible API、DeepSeek、Ollama、Embedding、RAG、Function Calling、SSE 流式响应。}
+  \resumeItem{\textbf{工程能力：}熟悉 Maven、Git、Docker、JMeter、JUnit、Mockito，具备接口文档、压测报告和项目 README 编写能力。}
+\end{itemize}
+
+%====================
+\section{项目经历}
+%====================
+
+\projectHeading
+  {Index12306 高并发购票与智能客服系统}{2026.07 -- 2026.08}
+  {Spring Boot 3、Java 17、MyBatis-Plus、PostgreSQL/pgvector、Redis、Redisson、RocketMQ、Vue 3、DeepSeek API、Ollama}
+
+\begin{itemize}
+  \resumeItem{负责仿 12306 购票系统的后端重构与核心业务实现，覆盖用户登录、乘车人管理、车票查询、购票锁座、订单创建、支付回调、取消订单、全额/部分退款、管理员后台等完整业务闭环。}
+  \resumeItem{设计高并发购票库存方案，基于 Redis 余票令牌、数据库座位状态和订单状态机实现购票锁座流程；修复购票失败场景下 Redis 余票错误回滚问题，避免库存超卖和库存虚增。}
+  \resumeItem{构建支付退款最终一致性链路，统一支付渠道枚举，优化支付成功回调、退款回调、延迟关单等 RocketMQ 消费逻辑，实现重复消息幂等处理，降低 MQ 重试导致的状态抖动。}
+  \resumeItem{完成用户安全边界加固，用户查询、真实信息查询、用户更新、乘车人和订单查询均以 JWT 登录态和 UserContext 为准，避免前端传参导致的越权访问风险。}
+  \resumeItem{设计并实现智能客服模块，支持 SSE 流式响应、历史会话、Function Calling 业务工具调用、订单归属校验、知识库检索和工具调用过程展示，提升业务查询与规则问答体验。}
+  \resumeItem{搭建 RAG 知识库能力，支持 Markdown、Word、PDF、文本入库，使用 pgvector 向量检索 + 关键词检索 + 上下文窗口扩展，并对相邻 chunk 做去重优化，提升召回结果完整性和可读性。}
+  \resumeItem{接入 DeepSeek 云端大模型和本地 Ollama Embedding 模型，增加用户级 user\_id 隔离、客服并发限流、线程池隔离、RAG Redis 缓存和模型健康检查，提升智能客服在并发场景下的稳定性。}
+  \resumeItem{开发新版 Vue 3 前端与管理后台，支持车票查询、订单支付、退款、个人信息、知识库管理、检索测试和移动端适配；移动端使用底部导航，智能客服以右下角浮窗形式接入。}
+  \resumeItem{使用 JUnit、Mockito、JMeter 对核心业务和高并发接口进行验证，补充支付退款幂等、RAG 去重、DeepSeek 请求体隔离、智能客服并发等测试，并整理 API 文档、压测报告和项目 README。}
+\end{itemize}
+
+\vspace{2pt}
+\textbf{项目成果：}
+\begin{itemize}
+  \resumeItem{完成从购票、支付到退款的业务闭环，重点解决库存一致性、订单状态一致性、MQ 幂等和权限越权问题。}
+  \resumeItem{支持 AI 智能客服与业务工具联动，可查询订单、车站、车票和知识库内容，并展示工具调用结果与信息来源。}
+  \resumeItem{沉淀 JMeter 压测脚本、智能客服压测报告、API 文档和可复现本地启动说明。}
+\end{itemize}
+
+%====================
+\section{其他项目（可选）}
+%====================
+
+\projectHeading
+  {项目名称}{时间}
+  {技术栈}
+
+\begin{itemize}
+  \resumeItem{用 2 到 4 条描述业务背景、个人职责、关键技术难点和最终结果。}
+  \resumeItem{尽量写“做了什么 + 用什么解决 + 带来什么结果”，避免只堆技术名词。}
+\end{itemize}
+
+%====================
+\section{实践与证书（可选）}
+%====================
+
+\begin{itemize}
+  \resumeItem{可填写实习经历、竞赛获奖、开源贡献、软著、英语等级、云厂商证书等。}
+  \resumeItem{如果内容不足，可以删除本节，把项目经历控制在更醒目的位置。}
+\end{itemize}
+
+\end{document}
