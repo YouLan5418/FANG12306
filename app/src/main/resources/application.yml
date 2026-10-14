@@ -104,7 +104,6 @@ ai:
     worker-queue-capacity: 128
     global-max-concurrent: 32
     user-max-concurrent: 1
-    rag-cache-ttl-seconds: 300
     system-prompt-file: config/customer-service-system-prompt.md
   embedding:
     base-url: http://localhost:11434/v1

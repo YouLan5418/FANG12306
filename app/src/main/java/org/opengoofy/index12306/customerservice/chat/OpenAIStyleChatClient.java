@@ -23,6 +23,12 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 /**
  * OpenAI 兼容聊天客户端，支持 Ollama 和云端 API。
@@ -35,6 +41,11 @@ public class OpenAIStyleChatClient implements ChatClient {
 
     private static final String FALLBACK_MESSAGE = "客服暂时不可用，请稍后再试";
 
+    private static final ScheduledExecutorService DEADLINES = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread thread = new Thread(r, "chat-stream-deadline");
+        thread.setDaemon(true);
+        return thread;
+    });
     private final ChatProperties properties;
     private final ModelHealthStore modelHealthStore;
     private final HttpClient httpClient;
@@ -98,11 +109,14 @@ public class OpenAIStyleChatClient implements ChatClient {
             return () -> {};
         }
         AtomicBoolean cancelled = new AtomicBoolean(false);
+        AtomicReference<InputStream> body = new AtomicReference<>();
         Future<?> future = streamExecutor.submit(() -> {
             try {
                 String bodyJson = buildRequestBody(request, true);
                 HttpRequest httpRequest = buildHttpRequest(bodyJson);
                 HttpResponse<InputStream> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofInputStream());
+                body.set(response.body());
+                if (cancelled.get()) { closeStream(body.get()); return; }
                 if (response.statusCode() != 200) {
                     String errorBody = readAll(response.body());
                     log.warn("流式聊天失败: status={}, body={}", response.statusCode(), errorBody);
@@ -126,6 +140,7 @@ public class OpenAIStyleChatClient implements ChatClient {
         return () -> {
             cancelled.set(true);
             future.cancel(true);
+            closeStream(body.get());
         };
     }
 
@@ -142,27 +157,47 @@ public class OpenAIStyleChatClient implements ChatClient {
                     .build();
         }
         ProbeStreamCallback probe = new ProbeStreamCallback(callback);
+        AtomicReference<InputStream> body = new AtomicReference<>();
+        CompletableFuture<HttpResponse<InputStream>> pending = httpClient.sendAsync(
+                buildHttpRequest(buildRequestBody(request, true)), HttpResponse.BodyHandlers.ofInputStream());
+        StreamCancellationHandle registration = callback.onCancellation(() -> {
+            pending.cancel(true);
+            closeStream(body.get());
+        });
+        ScheduledFuture<?> deadline = null;
+        AtomicBoolean expired = new AtomicBoolean();
         try {
-            String bodyJson = buildRequestBody(request, true);
-            HttpRequest httpRequest = buildHttpRequest(bodyJson);
-            HttpResponse<InputStream> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofInputStream());
-            if (response.statusCode() != 200) {
-                String errorBody = readAll(response.body());
-                log.warn("收集模式流式失败: status={}, body={}", response.statusCode(), errorBody);
-                modelHealthStore.markFailure(properties.getModel());
-                probe.onError(new RuntimeException("流式聊天失败: HTTP " + response.statusCode()));
-                throw new RuntimeException("流式聊天失败: HTTP " + response.statusCode());
-            }
-            AtomicBoolean cancelled = new AtomicBoolean(false);
-            readSseStream(response.body(), null, probe, cancelled);
+            if (callback.isCancelled()) throw new CancellationException("客服请求已取消");
+            HttpResponse<InputStream> response = pending.get(properties.getTimeoutMs(), TimeUnit.MILLISECONDS);
+            body.set(response.body());
+            if (callback.isCancelled()) throw new CancellationException("客服请求已取消");
+            deadline = DEADLINES.schedule(() -> {
+                expired.set(true);
+                closeStream(body.get());
+            }, properties.getTimeoutMs(), TimeUnit.MILLISECONDS);
+            if (response.statusCode() != 200) throw new IOException("流式聊天失败: HTTP " + response.statusCode());
+            readSseStream(response.body(), null, probe, new AtomicBoolean(false));
+            if (expired.get()) throw new IOException("模型回复超时");
+            if (callback.isCancelled()) throw new CancellationException("客服请求已取消");
             modelHealthStore.markSuccess(properties.getModel());
             return probe.toChatResponse();
-        } catch (RuntimeException e) {
-            throw e;
         } catch (Exception e) {
+            if (e instanceof InterruptedException) Thread.currentThread().interrupt();
+            if (callback.isCancelled() || e instanceof CancellationException) throw new CancellationException("客服请求已取消");
             modelHealthStore.markFailure(properties.getModel());
             probe.onError(e);
             throw new RuntimeException("收集模式流式失败", e);
+        } finally {
+            registration.cancel();
+            if (deadline != null) deadline.cancel(false);
+            pending.cancel(true);
+            closeStream(body.get());
+        }
+    }
+
+    private static void closeStream(InputStream stream) {
+        if (stream != null) {
+            try { stream.close(); } catch (IOException ignored) {}
         }
     }
 
@@ -174,7 +209,7 @@ public class OpenAIStyleChatClient implements ChatClient {
                                AtomicBoolean cancelled) throws IOException {
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
             String line;
-            while (!cancelled.get() && (line = reader.readLine()) != null) {
+            while (!cancelled.get() && (probe == null || !probe.isCancelled()) && (line = reader.readLine()) != null) {
                 if (line.isBlank()) {
                     continue;
                 }

@@ -44,12 +44,26 @@ public interface KnowledgeChunkMapper extends BaseMapper<KnowledgeChunkDO> {
     @Select("SELECT id, category_id, document_id, chunk_index, content, metadata " +
             "FROM knowledge_chunk " +
             "WHERE (CAST(#{categoryId} AS BIGINT) IS NULL OR category_id = CAST(#{categoryId} AS BIGINT)) " +
-            "AND content ILIKE CONCAT('%', #{query}, '%') " +
+            "AND content ILIKE CONCAT('%', CAST(#{query} AS TEXT), '%') " +
             "ORDER BY id " +
             "LIMIT #{topK}")
     List<ChunkSearchResult> keywordSearch(@Param("query") String query,
                                           @Param("categoryId") Long categoryId,
                                           @Param("topK") int topK);
+
+    /** 按分词后的词项召回，使用 strpos 避免 % 和 _ 被解释为通配符。 */
+    @Select({"<script>",
+            "SELECT id, category_id, document_id, chunk_index, content, metadata FROM knowledge_chunk",
+            "WHERE (CAST(#{categoryId} AS BIGINT) IS NULL OR category_id = CAST(#{categoryId} AS BIGINT))",
+            "AND (",
+            "<foreach collection='terms' item='term' separator=' OR '>",
+            "strpos(lower(content), lower(#{term})) &gt; 0",
+            "</foreach>", ") ORDER BY (",
+            "<foreach collection='terms' item='term' separator=' + '>",
+            "CASE WHEN strpos(lower(content), lower(#{term})) &gt; 0 THEN 1 ELSE 0 END",
+            "</foreach>", ") DESC, id LIMIT #{topK}", "</script>"})
+    List<ChunkSearchResult> keywordSearchTerms(@Param("terms") List<String> terms,
+                                               @Param("categoryId") Long categoryId, @Param("topK") int topK);
 
     /**
      * 查询命中切片的上下文窗口，用于 RAG 检索后的邻居扩展。

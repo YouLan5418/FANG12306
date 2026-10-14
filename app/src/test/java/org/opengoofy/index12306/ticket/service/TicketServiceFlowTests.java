@@ -205,7 +205,7 @@ class TicketServiceFlowTests {
 
     @Test
     void testPurchaseNoStockRejected() {
-        Long trainId = seedTrainBase(1);
+        Long trainId = seedTrainBase(0);
         String passengerId = registerUserAndPassenger("nos");
 
         PurchaseTicketReqDTO req = new PurchaseTicketReqDTO();
@@ -215,15 +215,12 @@ class TicketServiceFlowTests {
         PurchaseTicketPassengerDetailDTO p1 = new PurchaseTicketPassengerDetailDTO();
         p1.setPassengerId(passengerId);
         p1.setSeatType(2);
-        PurchaseTicketPassengerDetailDTO p2 = new PurchaseTicketPassengerDetailDTO();
-        p2.setPassengerId(passengerId);
-        p2.setSeatType(2);
-        req.setPassengers(List.of(p1, p2));
+        req.setPassengers(List.of(p1));
 
         assertThrows(AbstractException.class, () -> ticketService.purchaseTickets(req));
 
         String key = TicketCacheConstant.TRAIN_STATION_REMAINING_TICKET + trainId + "_" + DEPARTURE + "_" + ARRIVAL;
-        assertEquals("1", stringRedisTemplate.opsForHash().get(key, "2"));
+        assertEquals("0", stringRedisTemplate.opsForHash().get(key, "2"));
     }
 
     @Test

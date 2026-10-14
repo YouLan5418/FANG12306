@@ -6,6 +6,11 @@ package org.opengoofy.index12306.customerservice.chat;
  */
 public interface StreamCallback {
 
+    default boolean isCancelled() { return Thread.currentThread().isInterrupted(); }
+
+    /** 注册取消处理，返回句柄用于移除注册。 */
+    default StreamCancellationHandle onCancellation(Runnable action) { return () -> {}; }
+
     void onContent(String content);
 
     default void onThinking(String content) {

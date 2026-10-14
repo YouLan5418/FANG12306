@@ -19,7 +19,9 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.atomic.AtomicBoolean;
+import org.opengoofy.index12306.framework.convention.exception.ClientException;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -74,6 +76,9 @@ public class CustomerServiceChatService {
         if (effectiveUsername == null || effectiveUsername.isBlank()) {
             throw new RuntimeException("请先登录");
         }
+        if (question == null || question.isBlank() || question.length() > 8000) {
+            throw new ClientException("问题不能为空且不能超过8000字");
+        }
         rateLimiter.acquire(effectiveUsername);
         AiConcurrencyLimiter.Permit permit = concurrencyLimiter.acquire(effectiveUsername);
 
@@ -82,20 +87,29 @@ public class CustomerServiceChatService {
                 ? UUID.randomUUID().toString().replace("-", "")
                 : rawSessionId;
 
+        try {
+            memoryService.prepareSession(sessionId, effectiveUsername);
+        } catch (RuntimeException e) {
+            permit.close();
+            throw e;
+        }
+
         // SSE 连接 + 心跳
         SseEmitterSender sender = new SseEmitterSender();
         sender.setSessionId(sessionId);
+        sender.deferCompletion();
         sender.start();
 
         ToolExecutionContext ctx = new ToolExecutionContext(effectiveUsername, userId, sessionId);
 
-        try {
-            CompletableFuture.runAsync(() -> {
+        AtomicBoolean started = new AtomicBoolean();
+        FutureTask<Void> task = new FutureTask<>(() -> {
+                started.set(true);
                 try {
-                    List<ChatMessage> messages = new ArrayList<>(memoryService.loadHistory(sessionId));
-                    if (messages.isEmpty()) {
-                        messages.add(ChatMessage.system(systemPromptProvider.currentPrompt()));
-                    }
+                    if (sender.isCancelled()) return null;
+                    List<ChatMessage> messages = new ArrayList<>();
+                    messages.add(ChatMessage.system(systemPromptProvider.currentPrompt()));
+                    messages.addAll(memoryService.loadHistory(sessionId, effectiveUsername));
                     int newStart = messages.size();
                     messages.add(ChatMessage.user(question));
 
@@ -103,14 +117,26 @@ public class CustomerServiceChatService {
                     engine.run(messages, toolRegistry.allDefinitions(), sender, ctx);
 
                     // 保存新增消息（system prompt 不保存）
-                    memoryService.saveHistory(sessionId, effectiveUsername, messages.subList(newStart, messages.size()));
+                    if (!sender.isCompleted() && !sender.isCancelled()) {
+                        memoryService.saveHistory(sessionId, effectiveUsername, messages.subList(newStart, messages.size()));
+                        sender.finish();
+                    }
+                } catch (java.util.concurrent.CancellationException e) {
+                    log.debug("客服请求已取消: session={}", sessionId);
                 } catch (Exception e) {
                     log.error("对话处理失败: session={}", sessionId, e);
                     sender.onError(e);
                 } finally {
                     permit.close();
                 }
-            }, chatExecutor);
+                return null;
+            });
+        sender.onCancellation(() -> {
+            task.cancel(true);
+            if (!started.get()) permit.close();
+        });
+        try {
+            chatExecutor.execute(task);
         } catch (RejectedExecutionException e) {
             permit.close();
             sender.onError(new RuntimeException("智能客服繁忙，请稍后再试"));

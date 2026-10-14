@@ -2,6 +2,7 @@ package org.opengoofy.index12306.ticket.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import lombok.RequiredArgsConstructor;
@@ -65,9 +66,11 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -101,15 +104,32 @@ public class TicketServiceImpl implements TicketService {
 
     @Override
     public TicketPageQueryRespDTO pageListTicketQuery(TicketPageQueryReqDTO requestParam) {
-        if (requestParam.getDeparture() == null || requestParam.getArrival() == null) {
+        if (requestParam == null || requestParam.getDeparture() == null || requestParam.getDeparture().isBlank()
+                || requestParam.getArrival() == null || requestParam.getArrival().isBlank()) {
             throw new ClientException("出发站/到达站不能为空");
+        }
+        if (requestParam.getDeparture().equals(requestParam.getArrival())) {
+            throw new ClientException("出发站与到达站不能相同");
+        }
+        Long current = requestParam.getCurrent();
+        Long size = requestParam.getSize();
+        if (current == null || current < 1 || size == null || size < 1 || size > 500) {
+            throw new ClientException("分页参数不合法，页码须为正数，每页最多500条");
         }
         List<String> departureStations = resolveStationNames(requestParam.getDeparture());
         List<String> arrivalStations = resolveStationNames(requestParam.getArrival());
-        List<TrainStationRelationDO> relations = trainStationRelationMapper.selectList(
-                Wrappers.lambdaQuery(TrainStationRelationDO.class)
-                        .in(TrainStationRelationDO::getDeparture, departureStations)
-                        .in(TrainStationRelationDO::getArrival, arrivalStations));
+        var wrapper = Wrappers.lambdaQuery(TrainStationRelationDO.class)
+                .in(TrainStationRelationDO::getDeparture, departureStations)
+                .in(TrainStationRelationDO::getArrival, arrivalStations);
+        if (requestParam.getDepartureDate() != null) {
+            ZoneId zone = ZoneId.of("Asia/Shanghai");
+            LocalDate date = requestParam.getDepartureDate();
+            wrapper.ge(TrainStationRelationDO::getDepartureTime, Date.from(date.atStartOfDay(zone).toInstant()))
+                    .lt(TrainStationRelationDO::getDepartureTime, Date.from(date.plusDays(1).atStartOfDay(zone).toInstant()));
+        }
+        wrapper.orderByAsc(TrainStationRelationDO::getDepartureTime, TrainStationRelationDO::getId);
+        Page<TrainStationRelationDO> page = trainStationRelationMapper.selectPage(new Page<>(current, size), wrapper);
+        List<TrainStationRelationDO> relations = page.getRecords();
         List<TicketListDTO> trainList = new ArrayList<>();
         for (TrainStationRelationDO relation : relations) {
             TrainDO train = trainMapper.selectById(relation.getTrainId());
@@ -128,7 +148,7 @@ public class TicketServiceImpl implements TicketService {
                 .trainList(trainList)
                 .current(requestParam.getCurrent())
                 .size(requestParam.getSize())
-                .total((long) trainList.size())
+                .total(page.getTotal())
                 .build();
     }
 
@@ -166,6 +186,9 @@ public class TicketServiceImpl implements TicketService {
             distributedLock.lock();
             localLock(trainId).lock();
             try {
+                // 获取购票锁后重新检查，避免等待锁期间已经生成的订单被漏掉。
+                validatePassengerTimeConflict(passengerActuals,
+                        trainStationService.getRelation(trainId, requestParam.getDeparture(), requestParam.getArrival()));
                 // 令牌桶：余票不足直接拒绝
                 for (Map.Entry<Integer, Long> e : seatTypeCount.entrySet()) {
                     int remaining = getRemaining(trainId, e.getKey(), requestParam.getDeparture(), requestParam.getArrival());
@@ -333,9 +356,29 @@ public class TicketServiceImpl implements TicketService {
     // ---------- 私有辅助 ----------
 
     private void validatePurchase(PurchaseTicketReqDTO req) {
-        if (req.getTrainId() == null || req.getPassengers() == null || req.getPassengers().isEmpty()
-                || req.getDeparture() == null || req.getArrival() == null) {
-            throw new ClientException("购票参数缺失");
+        if (req == null || req.getTrainId() == null || !req.getTrainId().matches("[1-9]\\d*")
+                || req.getPassengers() == null || req.getPassengers().isEmpty()
+                || req.getDeparture() == null || req.getDeparture().isBlank()
+                || req.getArrival() == null || req.getArrival().isBlank()) {
+            throw new ClientException("购票参数缺失或不合法");
+        }
+        try {
+            Long.parseLong(req.getTrainId());
+        } catch (NumberFormatException ex) {
+            throw new ClientException("车次编号不合法");
+        }
+        if (req.getDeparture().equals(req.getArrival())) {
+            throw new ClientException("出发站与到达站不能相同");
+        }
+        Set<String> passengerIds = new HashSet<>();
+        for (var passenger : req.getPassengers()) {
+            if (passenger == null || passenger.getPassengerId() == null || passenger.getPassengerId().isBlank()
+                    || passenger.getSeatType() == null) {
+                throw new ClientException("乘车人或座席参数缺失");
+            }
+            if (!passengerIds.add(passenger.getPassengerId())) {
+                throw new ClientException("同一乘车人不能重复购票");
+            }
         }
     }
 

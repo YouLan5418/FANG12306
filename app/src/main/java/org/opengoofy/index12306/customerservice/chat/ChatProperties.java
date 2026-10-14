@@ -43,8 +43,6 @@ public class ChatProperties {
 
     private int userMaxConcurrent = 1;
 
-    private long ragCacheTtlSeconds = 300;
-
     private String systemPromptFile = "config/customer-service-system-prompt.md";
 
     private String systemPrompt = "你是 12306 铁路购票智能客服。请根据业务工具和知识库回答用户问题。";

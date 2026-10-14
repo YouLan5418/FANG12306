@@ -7,6 +7,7 @@ import type { StationOption, TicketItem } from "@/types/ticket"
 
 const router = useRouter()
 const query = reactive({
+  departureDate: "",
   departure: "",
   arrival: "",
   current: 1,
@@ -54,10 +55,11 @@ async function loadStations() {
   }
 }
 
-async function submit() {
+async function submit(resetPage = true) {
+  if (resetPage) query.current = 1
   loading.value = true
   try {
-    const page = await searchTickets(query)
+    const page = await searchTickets({ ...query, departureDate: query.departureDate || undefined })
     tickets.value = page.trainList || []
     total.value = page.total || 0
   } finally {
@@ -76,7 +78,7 @@ onMounted(loadStations)
 <template>
   <section class="ticket-search">
     <el-card shadow="never">
-      <el-form class="search-form" :model="query" @submit.prevent="submit">
+      <el-form class="search-form" :model="query" @submit.prevent="submit()">
         <el-form-item label="出发地">
           <el-select
             v-model="query.departure"
@@ -139,9 +141,9 @@ onMounted(loadStations)
         </el-form-item>
         <el-form-item label="乘车日期">
           <el-date-picker
-            disabled
+            v-model="query.departureDate"
             :prefix-icon="Calendar"
-            placeholder="后端当前按站点查询"
+            placeholder="选择乘车日期（可选）"
             type="date"
             value-format="YYYY-MM-DD"
           />
@@ -182,6 +184,13 @@ onMounted(loadStations)
           </template>
         </el-table-column>
       </el-table>
+      <el-pagination
+        v-model:current-page="query.current"
+        :page-size="query.size"
+        :total="total"
+        layout="prev, pager, next, total"
+        @current-change="submit(false)"
+      />
     </el-card>
   </section>
 </template>

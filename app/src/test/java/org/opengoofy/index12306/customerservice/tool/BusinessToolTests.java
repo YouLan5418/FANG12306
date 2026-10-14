@@ -165,7 +165,7 @@ class BusinessToolTests {
         when(ragRetriever.retrieve(anyString(), any(), anyInt()))
                 .thenReturn(List.of(new ScoredChunk(chunk, 0.95f)));
 
-        SearchKnowledgeTool tool = new SearchKnowledgeTool(ragRetriever, mock(DistributedCache.class), new ChatProperties());
+        SearchKnowledgeTool tool = new SearchKnowledgeTool(ragRetriever);
         String result = tool.execute(Map.of("query", "退票手续费"), ctx);
 
         JSONArray arr = JSON.parseArray(result);
@@ -179,22 +179,19 @@ class BusinessToolTests {
         when(ragRetriever.retrieve(anyString(), any(), anyInt()))
                 .thenReturn(List.of());
 
-        SearchKnowledgeTool tool = new SearchKnowledgeTool(ragRetriever, mock(DistributedCache.class), new ChatProperties());
+        SearchKnowledgeTool tool = new SearchKnowledgeTool(ragRetriever);
         String result = tool.execute(Map.of("query", "未知问题"), ctx);
 
         assertEquals("[]", result);
     }
 
     @Test
-    void searchKnowledge_cacheHitSkipsRetriever() {
-        RagRetriever ragRetriever = mock(RagRetriever.class);
-        DistributedCache distributedCache = mock(DistributedCache.class);
-        when(distributedCache.get(anyString(), eq(String.class))).thenReturn("[{\"content\":\"cached\"}]");
-
-        SearchKnowledgeTool tool = new SearchKnowledgeTool(ragRetriever, distributedCache, new ChatProperties());
-        String result = tool.execute(Map.of("query", "  退票   规则 "), ctx);
-
-        assertEquals("[{\"content\":\"cached\"}]", result);
-        verifyNoInteractions(ragRetriever);
+    void searchKnowledge_repeatedQueryReadsCurrentKnowledge() {
+        RagRetriever retriever = mock(RagRetriever.class);
+        when(retriever.retrieve(anyString(), isNull(), anyInt())).thenReturn(List.of());
+        SearchKnowledgeTool tool = new SearchKnowledgeTool(retriever);
+        tool.execute(Map.of("query", "学生票"), ctx);
+        tool.execute(Map.of("query", "学生票"), ctx);
+        verify(retriever, times(2)).retrieve("学生票", null, 5);
     }
 }

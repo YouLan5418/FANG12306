@@ -10,9 +10,8 @@ import java.util.Map;
  *
  * 在 OpenAI 兼容流式中，delta.tool_calls 和 delta.content 在每个 chunk 中互斥出现。
  * 有些模型会在同一轮中先输出说明文本，再输出 tool_calls。
- * 因此 content 会先缓冲：
- * - 最终没有工具调用：完成时将 content 推送给下游（用户看到回复）
- * - 出现工具调用：已缓冲/后续 content 作为 thinking 推送，FC 引擎执行工具并循环
+ * 文本立即透传；出现工具调用后的文本作为 thinking 推送。
+ * 工具调用前已推送的说明文本保留，不重放。
  *
  * 这消除了「先同步 chat 判断 tool_calls，再 streamChat 输出」的双倍调用。
  */
@@ -25,6 +24,7 @@ public class ProbeStreamCallback implements StreamCallback {
     }
 
     private final StreamCallback downstream;
+    private boolean finished;
     private volatile StreamMode mode = StreamMode.UNDECIDED;
 
     private final StringBuilder collectedContent = new StringBuilder();
@@ -36,10 +36,10 @@ public class ProbeStreamCallback implements StreamCallback {
 
     @Override
     public void onContent(String content) {
+        if (finished || isCancelled()) return;
         collectedContent.append(content);
-        if (mode == StreamMode.TOOL_CALL) {
-            downstream.onThinking(content);
-        }
+        if (mode == StreamMode.TOOL_CALL) downstream.onThinking(content);
+        else downstream.onContent(content);
     }
 
     /**
@@ -49,9 +49,7 @@ public class ProbeStreamCallback implements StreamCallback {
     public void onToolCallDelta(int index, String id, String name, String argumentsDelta) {
         if (mode == StreamMode.UNDECIDED) {
             mode = StreamMode.TOOL_CALL;
-            if (!collectedContent.isEmpty()) {
-                downstream.onThinking(collectedContent.toString());
-            }
+
         }
         ToolCallAssembler assembler = toolCallAssemblers.computeIfAbsent(index, k -> new ToolCallAssembler());
         if (id != null) {
@@ -67,11 +65,10 @@ public class ProbeStreamCallback implements StreamCallback {
 
     @Override
     public void onComplete() {
+        if (finished || isCancelled()) return;
+        finished = true;
         if (mode != StreamMode.TOOL_CALL) {
             mode = StreamMode.CONTENT;
-            if (!collectedContent.isEmpty()) {
-                downstream.onContent(collectedContent.toString());
-            }
             downstream.onComplete();
         }
         // TOOL_CALL 模式：不调 onComplete，FC 引擎会循环并产生最终回复
@@ -79,7 +76,14 @@ public class ProbeStreamCallback implements StreamCallback {
 
     @Override
     public void onError(Throwable error) {
+        if (finished) return;
+        finished = true;
         downstream.onError(error);
+    }
+
+    @Override public boolean isCancelled() { return downstream.isCancelled(); }
+    @Override public StreamCancellationHandle onCancellation(Runnable action) {
+        return downstream.onCancellation(action);
     }
 
     public StreamMode getMode() {

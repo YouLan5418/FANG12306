@@ -28,7 +28,13 @@ public class KeywordSearchChannel implements SearchChannel {
         if (queryText == null || queryText.isBlank()) {
             return List.of();
         }
-        List<ChunkSearchResult> results = chunkMapper.keywordSearch(queryText.trim(), categoryId, topK);
+        List<String> terms = queryTerms(queryText);
+        if (terms.isEmpty()) return List.of();
+        String literalQuery = queryText.trim().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+        List<ChunkSearchResult> results = chunkMapper.keywordSearch(literalQuery, categoryId, topK);
+        if (results.isEmpty()) {
+            results = chunkMapper.keywordSearchTerms(terms, categoryId, topK);
+        }
         List<RetrievedChunk> hits = new ArrayList<>(results.size());
         for (ChunkSearchResult r : results) {
             hits.add(RetrievedChunk.builder()
@@ -44,4 +50,18 @@ public class KeywordSearchChannel implements SearchChannel {
         }
         return hits;
     }
+    static List<String> queryTerms(String query) {
+        java.util.LinkedHashSet<String> terms = new java.util.LinkedHashSet<>();
+        var matcher = java.util.regex.Pattern.compile("[\\p{IsHan}]+|[A-Za-z0-9_-]+").matcher(query);
+        while (matcher.find()) {
+            String part = matcher.group();
+            if (Character.UnicodeScript.of(part.codePointAt(0)) == Character.UnicodeScript.HAN) {
+                int[] points = part.codePoints().toArray();
+                if (points.length == 1) terms.add(part);
+                else for (int i = 0; i < points.length - 1; i++) terms.add(new String(points, i, 2));
+            } else if (part.codePoints().anyMatch(Character::isLetterOrDigit)) terms.add(part);
+        }
+        return terms.stream().limit(24).toList();
+    }
+
 }

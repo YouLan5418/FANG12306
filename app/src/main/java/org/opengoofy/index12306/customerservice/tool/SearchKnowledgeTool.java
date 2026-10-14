@@ -4,20 +4,15 @@ import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.opengoofy.index12306.customerservice.chat.ChatProperties;
 import org.opengoofy.index12306.customerservice.chat.ToolDefinition;
 import org.opengoofy.index12306.customerservice.fc.ToolExecutionContext;
 import org.opengoofy.index12306.customerservice.fc.ToolExecutor;
 import org.opengoofy.index12306.customerservice.rag.RagRetriever;
 import org.opengoofy.index12306.customerservice.rerank.ScoredChunk;
-import org.opengoofy.index12306.framework.cache.DistributedCache;
 import org.springframework.stereotype.Component;
-import org.springframework.util.DigestUtils;
 
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 /**
  * 知识检索工具：将 RAG 混合检索暴露为 LLM 可调用的工具。
@@ -30,11 +25,8 @@ import java.util.concurrent.TimeUnit;
 public class SearchKnowledgeTool implements ToolExecutor {
 
     private static final int TOP_K = 5;
-    private static final String CACHE_KEY_PREFIX = "index12306:customer-service:rag:search:";
 
     private final RagRetriever ragRetriever;
-    private final DistributedCache distributedCache;
-    private final ChatProperties chatProperties;
 
     @Override
     public String name() {
@@ -64,11 +56,7 @@ public class SearchKnowledgeTool implements ToolExecutor {
         }
 
         String normalizedQuery = normalizeQuery(query);
-        String cached = getCachedResult(normalizedQuery);
-        if (cached != null) {
-            return cached;
-        }
-
+        // 直接检索当前知识库，不复用可能已删除或被修改的检索结果。
         List<ScoredChunk> chunks = ragRetriever.retrieve(normalizedQuery, null, TOP_K);
 
         JSONArray result = new JSONArray();
@@ -79,7 +67,6 @@ public class SearchKnowledgeTool implements ToolExecutor {
             result.add(c);
         }
         String json = result.toJSONString();
-        putCachedResult(normalizedQuery, json);
         return json;
     }
 
@@ -87,34 +74,4 @@ public class SearchKnowledgeTool implements ToolExecutor {
         return query.trim().replaceAll("\\s+", " ");
     }
 
-    private String cacheKey(String normalizedQuery) {
-        String digest = DigestUtils.md5DigestAsHex(normalizedQuery.getBytes(StandardCharsets.UTF_8));
-        return CACHE_KEY_PREFIX + digest;
-    }
-
-    private String getCachedResult(String normalizedQuery) {
-        long ttlSeconds = chatProperties.getRagCacheTtlSeconds();
-        if (ttlSeconds <= 0) {
-            return null;
-        }
-        try {
-            String cached = distributedCache.get(cacheKey(normalizedQuery), String.class);
-            return cached == null || cached.isBlank() ? null : cached;
-        } catch (Exception e) {
-            log.debug("RAG cache read failed: {}", e.getMessage());
-            return null;
-        }
-    }
-
-    private void putCachedResult(String normalizedQuery, String json) {
-        long ttlSeconds = chatProperties.getRagCacheTtlSeconds();
-        if (ttlSeconds <= 0) {
-            return;
-        }
-        try {
-            distributedCache.put(cacheKey(normalizedQuery), json, ttlSeconds, TimeUnit.SECONDS);
-        } catch (Exception e) {
-            log.debug("RAG cache write failed: {}", e.getMessage());
-        }
-    }
 }

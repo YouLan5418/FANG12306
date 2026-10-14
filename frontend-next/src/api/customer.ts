@@ -19,9 +19,10 @@ interface StreamHandlers {
   onComplete?: () => void
 }
 
-export async function streamCustomerChat(data: CustomerChatReq, handlers: StreamHandlers) {
+export async function streamCustomerChat(data: CustomerChatReq, handlers: StreamHandlers, signal?: AbortSignal) {
   const authStore = useAuthStore()
   const response = await fetch("/api/customer-service/chat", {
+    signal,
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -30,6 +31,7 @@ export async function streamCustomerChat(data: CustomerChatReq, handlers: Stream
     body: JSON.stringify(data)
   })
 
+  if (response.status === 401) authStore.clearSession()
   if (!response.ok || !response.body) {
     throw new Error(`客服请求失败：HTTP ${response.status}`)
   }
@@ -37,6 +39,14 @@ export async function streamCustomerChat(data: CustomerChatReq, handlers: Stream
   const reader = response.body.getReader()
   const decoder = new TextDecoder("utf-8")
   let buffer = ""
+  let terminalReceived = false
+  const streamHandlers: StreamHandlers = {
+    ...handlers,
+    onEvent: (event) => {
+      if (event.type === "done" || event.type === "error") terminalReceived = true
+      handlers.onEvent(event)
+    }
+  }
 
   try {
     while (true) {
@@ -47,16 +57,18 @@ export async function streamCustomerChat(data: CustomerChatReq, handlers: Stream
       buffer += decoder.decode(value, { stream: true })
       const lines = buffer.split(/\r?\n/)
       buffer = lines.pop() || ""
-      lines.forEach((line) => parseSseLine(line, handlers))
+      lines.forEach((line) => parseSseLine(line, streamHandlers))
     }
 
     if (buffer) {
-      parseSseLine(buffer, handlers)
+      parseSseLine(buffer, streamHandlers)
     }
-    handlers.onComplete?.()
+    if (!terminalReceived && !signal?.aborted) throw new Error("客服连接意外中断，请重试")
+    if (!signal?.aborted) handlers.onComplete?.()
   } catch (error) {
-    handlers.onError?.(error instanceof Error ? error : new Error("客服流读取失败"))
+    if (!signal?.aborted) handlers.onError?.(error instanceof Error ? error : new Error("客服流读取失败"))
   } finally {
+    if (signal?.aborted) await reader.cancel().catch(() => {})
     reader.releaseLock()
   }
 }
@@ -161,9 +173,11 @@ function parseSseLine(line: string, handlers: StreamHandlers) {
     return
   }
 
+  let event: CustomerSseEvent
   try {
-    handlers.onEvent(JSON.parse(payload) as CustomerSseEvent)
+    event = JSON.parse(payload) as CustomerSseEvent
   } catch {
-    handlers.onEvent({ type: "token", content: payload })
+    event = { type: "token", content: payload }
   }
+  handlers.onEvent(event)
 }

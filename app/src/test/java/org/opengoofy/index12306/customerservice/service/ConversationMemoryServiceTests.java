@@ -109,7 +109,7 @@ class ConversationMemoryServiceTests {
     }
 
     @Test
-    void loadHistory_toolRoleMessage_preservesToolName() {
+    void loadHistory_legacyOrphanToolMessage_isDiscarded() {
         ChatMessageDO msg = new ChatMessageDO();
         msg.setId(1L);
         msg.setRole("tool");
@@ -121,8 +121,6 @@ class ConversationMemoryServiceTests {
 
         List<ChatMessage> messages = service.loadHistory("session1");
 
-        assertEquals(1, messages.size());
-        assertEquals(ChatMessage.Role.TOOL, messages.get(0).getRole());
-        assertEquals("queryOrder", messages.get(0).getToolName());
+        assertTrue(messages.isEmpty());
     }
 }

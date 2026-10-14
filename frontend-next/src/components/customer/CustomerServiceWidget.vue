@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, ref } from "vue"
+import { nextTick, onBeforeUnmount, ref, watch } from "vue"
 import { useRouter } from "vue-router"
 import { ChatDotRound, Clock, Close, Delete, Plus, Promotion } from "@element-plus/icons-vue"
 import { ElMessage, ElMessageBox } from "element-plus"
@@ -23,6 +23,14 @@ interface ChatMessage {
   collapsed?: boolean
 }
 
+let activeController: AbortController | undefined
+function cancelRequest() {
+  activeController?.abort()
+  activeController = undefined
+  sending.value = false
+}
+onBeforeUnmount(cancelRequest)
+
 const router = useRouter()
 const authStore = useAuthStore()
 const open = ref(false)
@@ -34,6 +42,13 @@ const sessionId = ref("")
 const chatBodyRef = ref<HTMLElement>()
 const sessions = ref<ChatSession[]>([])
 const messages = ref<ChatMessage[]>([welcomeMessage()])
+
+watch(() => authStore.token, () => {
+  cancelRequest()
+  sessionId.value = ""
+  sessions.value = []
+  messages.value = [welcomeMessage()]
+})
 
 function welcomeMessage(): ChatMessage {
   return {
@@ -49,9 +64,16 @@ function toggle() {
     return
   }
   open.value = !open.value
+  if (!open.value) cancelRequest()
+}
+
+function closeChat() {
+  open.value = false
+  cancelRequest()
 }
 
 function newChat() {
+  cancelRequest()
   sessionId.value = ""
   showHistory.value = false
   messages.value = [welcomeMessage()]
@@ -68,18 +90,19 @@ async function openHistory() {
 }
 
 async function loadHistory(session: ChatSession) {
+  cancelRequest()
   historyLoading.value = true
   try {
     const history = await listCustomerMessages(session.sessionId)
     sessionId.value = session.sessionId
     messages.value = history.length
-      ? history.map((item) => {
+      ? history.filter((item) => item.role !== "assistant" || Boolean(item.content?.trim())).map((item) => {
           if (item.role === "tool") {
             return {
               role: "tool",
               content: "工具调用结果",
               toolName: item.toolName,
-              args: parseMaybeJson(item.toolArgs),
+              args: parseMaybeJson((parseMaybeJson(item.toolArgs) as { arguments?: string })?.arguments || item.toolArgs),
               result: parseMaybeJson(item.toolResult)
             }
           }
@@ -112,6 +135,8 @@ async function send() {
     return
   }
 
+  const controller = new AbortController()
+  activeController = controller
   messages.value.push({ role: "user", content })
   let assistantIndex = -1
   input.value = ""
@@ -126,23 +151,29 @@ async function send() {
       },
       {
         onEvent: (event) => {
-          assistantIndex = handleSseEvent(event, assistantIndex)
+          if (activeController === controller) assistantIndex = handleSseEvent(event, assistantIndex)
         },
         onError: (error) => {
+          if (activeController !== controller) return
           ensureAssistantMessage(assistantIndex).content ||= "客服暂时不可用，请稍后再试。"
           ElMessage.error(error.message)
         },
         onComplete: () => {
-          sending.value = false
+          if (activeController === controller) sending.value = false
         }
-      }
+      },
+      controller.signal
     )
   } catch (error) {
+    if (controller.signal.aborted) return
     ensureAssistantMessage(assistantIndex).content = "客服暂时不可用，请稍后再试。"
     ElMessage.error(error instanceof Error ? error.message : "客服请求失败")
   } finally {
-    sending.value = false
-    await scrollToBottom()
+    if (activeController === controller) {
+      sending.value = false
+      activeController = undefined
+      await scrollToBottom()
+    }
   }
 }
 
@@ -261,7 +292,7 @@ async function scrollToBottom() {
             <el-tooltip content="新会话" placement="bottom">
               <el-button :icon="Plus" circle text @click="newChat" />
             </el-tooltip>
-            <el-button :icon="Close" circle text @click="open = false" />
+            <el-button :icon="Close" circle text @click="closeChat" />
           </div>
         </header>
 

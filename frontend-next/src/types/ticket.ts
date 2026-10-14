@@ -8,6 +8,7 @@ export interface StationOption {
 }
 
 export interface TicketSearchReq {
+  departureDate?: string
   departure: string
   arrival: string
   current?: number

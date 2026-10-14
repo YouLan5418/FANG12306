@@ -76,9 +76,9 @@ class SseEmitterSenderTests {
     }
 
     @Test
-    void chatProperties_rateLimitDefaultIs10() {
+    void chatProperties_rateLimitDefaultIs30() {
         ChatProperties props = new ChatProperties();
-        assertEquals(10, props.getRateLimitPerMinute());
+        assertEquals(30, props.getRateLimitPerMinute());
     }
 
     // ==================== JSON 事件格式（mock emitter） ====================

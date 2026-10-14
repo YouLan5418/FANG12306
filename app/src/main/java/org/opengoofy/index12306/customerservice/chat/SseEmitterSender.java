@@ -43,6 +43,39 @@ public class SseEmitterSender implements StreamCallback {
     private String sessionId;
     private ScheduledFuture<?> heartbeatFuture;
     private volatile boolean completed = false;
+    private volatile boolean cancelled;
+    private boolean deferCompletion;
+    private final java.util.List<Runnable> cancellationActions = new java.util.ArrayList<>();
+
+    public void deferCompletion() { deferCompletion = true; }
+
+    @Override public boolean isCancelled() { return cancelled || Thread.currentThread().isInterrupted(); }
+
+    @Override public StreamCancellationHandle onCancellation(Runnable action) {
+        synchronized (cancellationActions) {
+            if (!cancelled) {
+                cancellationActions.add(action);
+                return () -> { synchronized (cancellationActions) { cancellationActions.remove(action); } };
+            }
+        }
+        action.run();
+        return () -> {};
+    }
+
+    private void cancelWork() {
+        List<Runnable> actions;
+        synchronized (cancellationActions) {
+            if (cancelled) return;
+            cancelled = true;
+            completed = true;
+            actions = new ArrayList<>(cancellationActions);
+            cancellationActions.clear();
+        }
+        stopHeartbeat();
+        for (Runnable action : actions) {
+            try { action.run(); } catch (Exception e) { log.debug("取消客服任务失败", e); }
+        }
+    }
 
     public SseEmitterSender() {
         this.emitter = new SseEmitter(TIMEOUT_MS);
@@ -67,14 +100,18 @@ public class SseEmitterSender implements StreamCallback {
                     try {
                         emitter.send(SseEmitter.event().comment("heartbeat"));
                     } catch (Exception ignored) {
-                        // 客户端可能已断连
+                        cancelWork();
                     }
                 },
                 HEARTBEAT_INTERVAL_S, HEARTBEAT_INTERVAL_S, TimeUnit.SECONDS);
 
-        emitter.onCompletion(this::stopHeartbeat);
-        emitter.onTimeout(() -> {
+        emitter.onCompletion(() -> {
+            if (!completed) cancelWork();
             stopHeartbeat();
+        });
+        emitter.onError(error -> cancelWork());
+        emitter.onTimeout(() -> {
+            cancelWork();
             emitter.complete();
         });
         return this;
@@ -101,8 +138,7 @@ public class SseEmitterSender implements StreamCallback {
             emitter.send(SseEmitter.event().data(jsonToken(content)));
         } catch (Exception e) {
             log.debug("SSE 发送失败，客户端可能已断连: {}", e.getMessage());
-            completed = true;
-            stopHeartbeat();
+            cancelWork();
         }
     }
 
@@ -115,8 +151,7 @@ public class SseEmitterSender implements StreamCallback {
             emitter.send(SseEmitter.event().data(jsonThinking(content)));
         } catch (Exception e) {
             log.debug("SSE 发送失败，客户端可能已断连: {}", e.getMessage());
-            completed = true;
-            stopHeartbeat();
+            cancelWork();
         }
     }
 
@@ -129,8 +164,7 @@ public class SseEmitterSender implements StreamCallback {
             emitter.send(SseEmitter.event().data(jsonToolCall(toolCall)));
         } catch (Exception e) {
             log.debug("SSE 发送失败，客户端可能已断连: {}", e.getMessage());
-            completed = true;
-            stopHeartbeat();
+            cancelWork();
         }
     }
 
@@ -143,13 +177,16 @@ public class SseEmitterSender implements StreamCallback {
             emitter.send(SseEmitter.event().data(jsonToolResult(toolCall, result)));
         } catch (Exception e) {
             log.debug("SSE 发送失败，客户端可能已断连: {}", e.getMessage());
-            completed = true;
-            stopHeartbeat();
+            cancelWork();
         }
     }
 
     @Override
     public void onComplete() {
+        if (!deferCompletion) finish();
+    }
+
+    public void finish() {
         if (completed) {
             return;
         }
@@ -172,8 +209,7 @@ public class SseEmitterSender implements StreamCallback {
             emitter.send(SseEmitter.event().data(jsonError(error)));
         } catch (Exception ignored) {
         }
-        completed = true;
-        stopHeartbeat();
+        cancelWork();
         emitter.complete();
     }
 

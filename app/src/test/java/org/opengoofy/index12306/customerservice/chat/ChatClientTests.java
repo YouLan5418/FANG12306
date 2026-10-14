@@ -258,7 +258,7 @@ class ChatClientTests {
     }
 
     @Test
-    void probeStreamCallback_contentBeforeToolCallBecomesThinking() {
+    void probeStreamCallback_contentBeforeToolCallIsStreamedOnce() {
         AtomicReference<String> receivedContent = new AtomicReference<>("");
         AtomicReference<String> thinkingContent = new AtomicReference<>("");
         AtomicReference<Boolean> onCompleteCalled = new AtomicReference<>(false);
@@ -292,8 +292,8 @@ class ChatClientTests {
         probe.onComplete();
 
         assertEquals(ProbeStreamCallback.StreamMode.TOOL_CALL, probe.getMode());
-        assertEquals("", receivedContent.get());
-        assertEquals("我先查询知识库。", thinkingContent.get());
+        assertEquals("我先查询知识库。", receivedContent.get());
+        assertEquals("", thinkingContent.get());
         assertFalse(onCompleteCalled.get(), "onComplete should NOT be called in TOOL_CALL mode");
 
         ChatResponse resp = probe.toChatResponse();
